@@ -1,0 +1,8 @@
+# SoftwareEngg repo: the RocketMoney project lives in its own repo
+# (sairishigangarapu/RocketMoney) checked out as nested SE/RocketMoney/.
+# Never commit that directory here.
+RocketMoney/
+node_modules/
+dist/
+.env
+*.log
