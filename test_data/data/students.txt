@@ -1,0 +1,1 @@
+"Student data for UATC test" | Set-Content test_data\data\students.txt
