@@ -5,21 +5,18 @@ project(UATC
     LANGUAGES CXX
 )
 
+# Use C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Header files
-include_directories(
-    ${PROJECT_SOURCE_DIR}/include
-)
-
-# UATC filesystem library
+# Filesystem library
 add_library(uatc_filesystem
     src/filesystem/file_enumerator.cpp
+    src/filesystem/file_reader.cpp
 )
 
-# Public headers
+# Header include directory
 target_include_directories(uatc_filesystem
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
@@ -30,14 +27,18 @@ add_executable(uatc_tests
     tests/filesystem_test.cpp
 )
 
+# Link filesystem library to tests
 target_link_libraries(uatc_tests
     PRIVATE
         uatc_filesystem
 )
 
-# Use static C++ runtime libraries on MinGW/Windows
-target_link_options(uatc_tests
-    PRIVATE
-        -static-libgcc
-        -static-libstdc++
-)
+# Static MinGW runtime
+# This avoids the Windows runtime DLL issue we encountered earlier.
+if(MINGW)
+    target_link_options(uatc_tests
+        PRIVATE
+            -static-libgcc
+            -static-libstdc++
+    )
+endif()
