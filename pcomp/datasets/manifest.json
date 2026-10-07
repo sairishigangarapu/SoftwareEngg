@@ -1,0 +1,53 @@
+{
+  "seed": 1337,
+  "files": [
+    {
+      "category": "text",
+      "path": "text/synthetic_zipf.txt",
+      "bytes": 4000000,
+      "sha256": "3c93131f75e06ba027d2a01e0515ce93e5557af8d23d995ad2ff38b51ea49b79",
+      "description": "Zipf-distributed pseudo-English",
+      "generator": "seeded rng 1337"
+    },
+    {
+      "category": "source",
+      "path": "source/headers.c",
+      "bytes": 1327500,
+      "sha256": "6f8e8abebdceb4d1c86fb5fbd58c6aa7782dcf4ddae8f165311aa7b1ee65610d",
+      "description": "Concatenated C headers (system dependent!)",
+      "generator": "/usr/include/*.h sorted"
+    },
+    {
+      "category": "numeric",
+      "path": "numeric/float64_signal.bin",
+      "bytes": 4000000,
+      "sha256": "488b88378b015b64c002251bd7d963b3733970d9b8d6acef6411e843c18e237b",
+      "description": "float64 sine + gaussian noise",
+      "generator": "seeded rng 1337"
+    },
+    {
+      "category": "numeric",
+      "path": "numeric/uint32_table.bin",
+      "bytes": 4000000,
+      "sha256": "cfeedb7fdc3dacf37eebded9559f145f03bb3d62bad30d988ec73f6a77aef51b",
+      "description": "Mostly-increasing uint32 records",
+      "generator": "seeded rng 1337"
+    },
+    {
+      "category": "compressed",
+      "path": "compressed/text.gz",
+      "bytes": 1323653,
+      "sha256": "3488b1c0a81779965788c5717fc709a50fa1831860f39764c9ac5cdb20938bee",
+      "description": "gzip -6 of the text sample",
+      "generator": "gzip mtime=0"
+    },
+    {
+      "category": "compressed",
+      "path": "compressed/random.bin",
+      "bytes": 2000000,
+      "sha256": "5ad99d806c4edc6a7e79f9787b07fc3b23817373b660bfcb8540cc4f9181dcee",
+      "description": "Incompressible random bytes",
+      "generator": "seeded rng 1337"
+    }
+  ]
+}
