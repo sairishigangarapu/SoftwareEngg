@@ -5,40 +5,80 @@ project(UATC
     LANGUAGES CXX
 )
 
-# Use C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ------------------------------------------------------------
 # Filesystem library
+# ------------------------------------------------------------
+
 add_library(uatc_filesystem
     src/filesystem/file_enumerator.cpp
     src/filesystem/file_reader.cpp
 )
 
-# Header include directory
 target_include_directories(uatc_filesystem
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
 
-# Test executable
+# ------------------------------------------------------------
+# Archive library
+# ------------------------------------------------------------
+
+add_library(uatc_archive
+    src/archive/archive_binary.cpp
+)
+
+target_include_directories(uatc_archive
+    PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+)
+
+# ------------------------------------------------------------
+# Filesystem tests
+# ------------------------------------------------------------
+
 add_executable(uatc_tests
     tests/filesystem_test.cpp
 )
 
-# Link filesystem library to tests
 target_link_libraries(uatc_tests
     PRIVATE
         uatc_filesystem
+        uatc_archive
 )
 
-# Static MinGW runtime
-# This avoids the Windows runtime DLL issue we encountered earlier.
+# ------------------------------------------------------------
+# Archive binary tests
+# ------------------------------------------------------------
+
+add_executable(uatc_archive_tests
+    tests/archive_binary_test.cpp
+)
+
+target_link_libraries(uatc_archive_tests
+    PRIVATE
+        uatc_archive
+)
+
+# ------------------------------------------------------------
+# MinGW static runtime
+# ------------------------------------------------------------
+
 if(MINGW)
+
     target_link_options(uatc_tests
         PRIVATE
             -static-libgcc
             -static-libstdc++
     )
+
+    target_link_options(uatc_archive_tests
+        PRIVATE
+            -static-libgcc
+            -static-libstdc++
+    )
+
 endif()
