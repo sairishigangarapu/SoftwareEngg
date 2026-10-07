@@ -6,3 +6,8 @@ node_modules/
 dist/
 .env
 *.log
+# CMake build directory
+build/
+
+# Compiled executables
+*.exe
