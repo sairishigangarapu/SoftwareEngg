@@ -29,6 +29,7 @@ target_include_directories(uatc_filesystem
 
 add_library(uatc_archive
     src/archive/archive_binary.cpp
+    src/archive/block.cpp
 )
 
 target_include_directories(uatc_archive
@@ -64,6 +65,19 @@ target_link_libraries(uatc_archive_tests
 )
 
 # ------------------------------------------------------------
+# Block splitter tests
+# ------------------------------------------------------------
+
+add_executable(uatc_block_tests
+    tests/block_test.cpp
+)
+
+target_link_libraries(uatc_block_tests
+    PRIVATE
+        uatc_archive
+)
+
+# ------------------------------------------------------------
 # MinGW static runtime
 # ------------------------------------------------------------
 
@@ -76,6 +90,12 @@ if(MINGW)
     )
 
     target_link_options(uatc_archive_tests
+        PRIVATE
+            -static-libgcc
+            -static-libstdc++
+    )
+
+    target_link_options(uatc_block_tests
         PRIVATE
             -static-libgcc
             -static-libstdc++
