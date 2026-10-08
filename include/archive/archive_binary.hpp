@@ -19,8 +19,13 @@ public:
     void write_u32(std::uint32_t value);
     void write_u64(std::uint64_t value);
 
-    void write_bytes(const std::vector<std::uint8_t>& data);
-    void write_string(const std::string& value);
+    void write_bytes(
+        const std::vector<std::uint8_t>& data
+    );
+
+    void write_string(
+        const std::string& value
+    );
 
     std::uint64_t position();
 
@@ -30,7 +35,9 @@ private:
 
 class BinaryReader {
 public:
-    explicit BinaryReader(const std::filesystem::path& path);
+    explicit BinaryReader(
+        const std::filesystem::path& path
+    );
 
     ~BinaryReader();
 
@@ -39,10 +46,19 @@ public:
     std::uint32_t read_u32();
     std::uint64_t read_u64();
 
-    std::vector<std::uint8_t> read_bytes(std::size_t count);
-    std::string read_string(std::size_t count);
+    std::vector<std::uint8_t> read_bytes(
+        std::size_t count
+    );
+
+    std::string read_string(
+        std::size_t count
+    );
 
     std::uint64_t position();
+
+    void seekg(
+        std::uint64_t position
+    );
 
 private:
     std::ifstream file_;

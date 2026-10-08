@@ -12,6 +12,10 @@ void ArchiveWriter::write(
     const std::filesystem::path& source_file,
     const std::vector<Block>& blocks
 ) {
+    // --------------------------------------------------------
+    // Validate source file
+    // --------------------------------------------------------
+
     if (!std::filesystem::exists(source_file)) {
         throw std::runtime_error(
             "Source file does not exist: " +
@@ -39,47 +43,66 @@ void ArchiveWriter::write(
     ArchiveHeader header;
 
     header.magic = UATC_MAGIC;
+
     header.version = UATC_VERSION;
+
+    header.header_size =
+        UATC_ARCHIVE_HEADER_SIZE;
 
     header.file_count = 1;
 
     header.block_count =
-        static_cast<std::uint32_t>(blocks.size());
+        static_cast<std::uint32_t>(
+            blocks.size()
+        );
 
     // --------------------------------------------------------
     // Calculate archive layout
     //
     // Header
     // File Record
-    // Path
-    // Block Records
+    // File Path
+    // Block Index
     // Payload
     // --------------------------------------------------------
 
     const std::uint64_t header_size =
-        48;
+        UATC_ARCHIVE_HEADER_SIZE;
 
     const std::uint64_t file_record_size =
-        36;
+        UATC_FILE_RECORD_SIZE;
 
     const std::uint64_t block_record_size =
-        48;
+        UATC_BLOCK_RECORD_SIZE;
 
-    header.header_size =
-        static_cast<std::uint16_t>(header_size);
+    // --------------------------------------------------------
+    // File Table
+    // --------------------------------------------------------
 
     header.file_table_offset =
         header_size;
 
+    // --------------------------------------------------------
+    // File Path
+    // --------------------------------------------------------
+
     const std::uint64_t path_offset =
         header.file_table_offset +
         file_record_size;
+
+    // --------------------------------------------------------
+    // Block Index
+    // --------------------------------------------------------
 
     const std::uint64_t block_index_offset =
         path_offset +
         static_cast<std::uint64_t>(
             relative_path.size()
         );
+
+    // --------------------------------------------------------
+    // Payload
+    // --------------------------------------------------------
 
     const std::uint64_t payload_offset =
         block_index_offset +
@@ -104,16 +127,37 @@ void ArchiveWriter::write(
     // Write Header
     // --------------------------------------------------------
 
-    writer.write_u32(header.magic);
-    writer.write_u16(header.version);
-    writer.write_u16(header.header_size);
+    writer.write_u32(
+        header.magic
+    );
 
-    writer.write_u32(header.file_count);
-    writer.write_u32(header.block_count);
+    writer.write_u16(
+        header.version
+    );
 
-    writer.write_u64(header.file_table_offset);
-    writer.write_u64(header.block_index_offset);
-    writer.write_u64(header.payload_offset);
+    writer.write_u16(
+        header.header_size
+    );
+
+    writer.write_u32(
+        header.file_count
+    );
+
+    writer.write_u32(
+        header.block_count
+    );
+
+    writer.write_u64(
+        header.file_table_offset
+    );
+
+    writer.write_u64(
+        header.block_index_offset
+    );
+
+    writer.write_u64(
+        header.payload_offset
+    );
 
     // --------------------------------------------------------
     // Write File Table Record
@@ -121,7 +165,9 @@ void ArchiveWriter::write(
 
     writer.write_u32(0); // file_id
 
-    writer.write_u64(path_offset);
+    writer.write_u64(
+        path_offset
+    );
 
     writer.write_u32(
         static_cast<std::uint32_t>(
@@ -129,7 +175,9 @@ void ArchiveWriter::write(
         )
     );
 
-    writer.write_u64(original_size);
+    writer.write_u64(
+        original_size
+    );
 
     writer.write_u32(
         blocks.empty()
@@ -147,7 +195,9 @@ void ArchiveWriter::write(
     // Write File Path
     // --------------------------------------------------------
 
-    writer.write_string(relative_path);
+    writer.write_string(
+        relative_path
+    );
 
     // --------------------------------------------------------
     // Write Block Index
@@ -157,31 +207,45 @@ void ArchiveWriter::write(
         payload_offset;
 
     for (const auto& block : blocks) {
-        writer.write_u32(0); // file_id
 
-        writer.write_u32(block.block_id);
+        // File ID
+        writer.write_u32(0);
 
-        writer.write_u64(current_payload_offset);
+        // Block ID
+        writer.write_u32(
+            block.block_id
+        );
 
+        // Payload offset
+        writer.write_u64(
+            current_payload_offset
+        );
+
+        // Original length
         writer.write_u64(
             static_cast<std::uint64_t>(
                 block.data.size()
             )
         );
 
+        // Stored length
+        //
+        // No compression is used yet,
+        // so stored length == original length.
         writer.write_u64(
             static_cast<std::uint64_t>(
                 block.data.size()
             )
         );
 
-        // Raw block
+        // Transform
         writer.write_u8(
             static_cast<std::uint8_t>(
                 TransformId::None
             )
         );
 
+        // Codec
         writer.write_u8(
             static_cast<std::uint8_t>(
                 CodecId::None
@@ -191,7 +255,8 @@ void ArchiveWriter::write(
         // Reserved bytes
         writer.write_u16(0);
 
-        // Simple checksum placeholder.
+        // Checksum placeholder.
+        //
         // A real checksum algorithm will be added later.
         writer.write_u32(0);
 
@@ -206,7 +271,10 @@ void ArchiveWriter::write(
     // --------------------------------------------------------
 
     for (const auto& block : blocks) {
-        writer.write_bytes(block.data);
+
+        writer.write_bytes(
+            block.data
+        );
     }
 }
 
