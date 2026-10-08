@@ -30,6 +30,7 @@ target_include_directories(uatc_filesystem
 add_library(uatc_archive
     src/archive/archive_binary.cpp
     src/archive/block.cpp
+    src/archive/archive_writer.cpp
 )
 
 target_include_directories(uatc_archive
@@ -78,6 +79,20 @@ target_link_libraries(uatc_block_tests
 )
 
 # ------------------------------------------------------------
+# Archive writer tests
+# ------------------------------------------------------------
+
+add_executable(uatc_archive_writer_tests
+    tests/archive_writer_test.cpp
+)
+
+target_link_libraries(uatc_archive_writer_tests
+    PRIVATE
+        uatc_filesystem
+        uatc_archive
+)
+
+# ------------------------------------------------------------
 # MinGW static runtime
 # ------------------------------------------------------------
 
@@ -96,6 +111,12 @@ if(MINGW)
     )
 
     target_link_options(uatc_block_tests
+        PRIVATE
+            -static-libgcc
+            -static-libstdc++
+    )
+
+    target_link_options(uatc_archive_writer_tests
         PRIVATE
             -static-libgcc
             -static-libstdc++
