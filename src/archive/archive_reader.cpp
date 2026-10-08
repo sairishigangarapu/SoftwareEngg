@@ -96,6 +96,60 @@ void ArchiveReader::validate_header(
     }
 }
 
+void ArchiveReader::validate_block(
+    std::uint32_t block_id,
+    std::uint32_t file_id,
+    std::uint64_t original_length,
+    std::uint64_t stored_length,
+    TransformId transform_id,
+    CodecId codec_id
+) {
+    if (file_id != 0) {
+        throw std::runtime_error(
+            "Invalid block file ID."
+        );
+    }
+
+    if (block_id == std::numeric_limits<std::uint32_t>::max()) {
+        throw std::runtime_error(
+            "Invalid block ID."
+        );
+    }
+
+    // Day 5 currently supports raw blocks only.
+    if (codec_id == CodecId::None) {
+
+        if (transform_id != TransformId::None) {
+            throw std::runtime_error(
+                "Raw block cannot use a transform."
+            );
+        }
+
+        if (stored_length != original_length) {
+            throw std::runtime_error(
+                "Raw block stored length must equal "
+                "original length."
+            );
+        }
+
+        return;
+    }
+
+    // A codec is present, so a transformed/encoded block
+    // may have a different stored length.
+    //
+    // Actual codec decoding will be implemented later.
+    if (codec_id != CodecId::Baseline) {
+        throw std::runtime_error(
+            "Unsupported codec."
+        );
+    }
+
+    throw std::runtime_error(
+        "Baseline codec decoding is not implemented yet."
+    );
+}
+
 std::vector<std::uint8_t> ArchiveReader::read(
     const std::filesystem::path& archive_path
 ) {
@@ -144,7 +198,7 @@ std::vector<std::uint8_t> ArchiveReader::read(
     }
 
     // --------------------------------------------------------
-    // Validate File Table
+    // File Table
     // --------------------------------------------------------
 
     const std::uint64_t file_table_end =
@@ -200,7 +254,7 @@ std::vector<std::uint8_t> ArchiveReader::read(
     }
 
     // --------------------------------------------------------
-    // Validate File Path
+    // File Path
     // --------------------------------------------------------
 
     const std::uint64_t path_end =
@@ -229,7 +283,7 @@ std::vector<std::uint8_t> ArchiveReader::read(
     }
 
     // --------------------------------------------------------
-    // Validate Block Index
+    // Block Index
     // --------------------------------------------------------
 
     const std::uint64_t block_index_size =
@@ -253,10 +307,6 @@ std::vector<std::uint8_t> ArchiveReader::read(
     reader.seekg(
         header.block_index_offset
     );
-
-    // --------------------------------------------------------
-    // Read Block Metadata
-    // --------------------------------------------------------
 
     struct BlockMetadata {
         std::uint32_t block_id;
@@ -302,17 +352,8 @@ std::vector<std::uint8_t> ArchiveReader::read(
                 reader.read_u8()
             );
 
-        // Reserved
         reader.read_u16();
-
-        // Checksum
         reader.read_u32();
-
-        if (block_file_id != 0) {
-            throw std::runtime_error(
-                "Invalid block file ID."
-            );
-        }
 
         if (block_id != i) {
             throw std::runtime_error(
@@ -320,23 +361,14 @@ std::vector<std::uint8_t> ArchiveReader::read(
             );
         }
 
-        if (transform_id != TransformId::None) {
-            throw std::runtime_error(
-                "Unsupported transform."
-            );
-        }
-
-        if (codec_id != CodecId::None) {
-            throw std::runtime_error(
-                "Unsupported codec."
-            );
-        }
-
-        if (original_length != stored_length) {
-            throw std::runtime_error(
-                "Raw block length mismatch."
-            );
-        }
+        validate_block(
+            block_id,
+            block_file_id,
+            original_length,
+            stored_length,
+            transform_id,
+            codec_id
+        );
 
         const std::uint64_t payload_end =
             checked_add(
@@ -362,7 +394,7 @@ std::vector<std::uint8_t> ArchiveReader::read(
     }
 
     // --------------------------------------------------------
-    // Reconstruct original file
+    // Reconstruct file
     // --------------------------------------------------------
 
     std::vector<std::uint8_t> result;
@@ -394,7 +426,7 @@ std::vector<std::uint8_t> ArchiveReader::read(
     }
 
     // --------------------------------------------------------
-    // Verify reconstructed size
+    // Final size check
     // --------------------------------------------------------
 
     if (result.size() != original_size) {
