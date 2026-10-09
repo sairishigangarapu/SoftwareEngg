@@ -5,6 +5,8 @@
 #include <string>
 
 #include "archive/archive_binary.hpp"
+#include "archive/transforms.hpp"
+#include "archive/codec.hpp"
 
 namespace uatc {
 
@@ -116,38 +118,26 @@ void ArchiveReader::validate_block(
         );
     }
 
-    // Day 5 currently supports raw blocks only.
-    if (codec_id == CodecId::None) {
-
-        if (transform_id != TransformId::None) {
-            throw std::runtime_error(
-                "Raw block cannot use a transform."
-            );
-        }
-
-        if (stored_length != original_length) {
-            throw std::runtime_error(
-                "Raw block stored length must equal "
-                "original length."
-            );
-        }
-
-        return;
+    if (transform_id != TransformId::None &&
+        transform_id != TransformId::RLE &&
+        transform_id != TransformId::Delta) {
+        throw std::runtime_error("Unsupported transform.");
     }
 
-    // A codec is present, so a transformed/encoded block
-    // may have a different stored length.
-    //
-    // Actual codec decoding will be implemented later.
-    if (codec_id != CodecId::Baseline) {
+    if (codec_id != CodecId::None &&
+        codec_id != CodecId::Baseline) {
+        throw std::runtime_error("Unsupported codec.");
+    }
+
+    // Raw blocks (no transform and no codec) must preserve length.
+    if (transform_id == TransformId::None &&
+        codec_id == CodecId::None &&
+        stored_length != original_length) {
         throw std::runtime_error(
-            "Unsupported codec."
+            "Raw block stored length must equal original length."
         );
     }
 
-    throw std::runtime_error(
-        "Baseline codec decoding is not implemented yet."
-    );
 }
 
 std::vector<std::uint8_t> ArchiveReader::read(
@@ -411,18 +401,25 @@ std::vector<std::uint8_t> ArchiveReader::read(
             block.payload_offset
         );
 
-        const auto block_data =
+        const auto stored_data =
             reader.read_bytes(
-                static_cast<std::size_t>(
-                    block.stored_length
-                )
+                static_cast<std::size_t>(block.stored_length)
             );
 
-        result.insert(
-            result.end(),
-            block_data.begin(),
-            block_data.end()
-        );
+        // Encoding order is transform -> codec, so decoding is
+        // codec -> inverse transform.
+        auto decoded =
+            Codec::decode(stored_data, block.codec_id);
+        decoded =
+            Transform::decode(decoded, block.transform_id);
+
+        if (decoded.size() != block.original_length) {
+            throw std::runtime_error(
+                "Decoded block length does not match metadata."
+            );
+        }
+
+        result.insert(result.end(), decoded.begin(), decoded.end());
     }
 
     // --------------------------------------------------------

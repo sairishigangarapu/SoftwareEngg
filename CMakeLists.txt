@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 3.16)
 
 project(UATC
@@ -32,6 +33,8 @@ add_library(uatc_archive
     src/archive/block.cpp
     src/archive/archive_writer.cpp
     src/archive/archive_reader.cpp
+    src/archive/codec.cpp
+    src/archive/transforms.cpp
 )
 
 target_include_directories(uatc_archive
@@ -108,6 +111,19 @@ target_link_libraries(uatc_archive_reader_tests
 )
 
 # ------------------------------------------------------------
+# Transform and codec tests
+# ------------------------------------------------------------
+
+add_executable(uatc_transform_codec_tests
+    tests/transform_codec_test.cpp
+)
+
+target_link_libraries(uatc_transform_codec_tests
+    PRIVATE
+        uatc_archive
+)
+
+# ------------------------------------------------------------
 # MinGW static runtime
 # ------------------------------------------------------------
 
@@ -138,6 +154,12 @@ if(MINGW)
     )
 
     target_link_options(uatc_archive_reader_tests
+        PRIVATE
+            -static-libgcc
+            -static-libstdc++
+    )
+
+    target_link_options(uatc_transform_codec_tests
         PRIVATE
             -static-libgcc
             -static-libstdc++
