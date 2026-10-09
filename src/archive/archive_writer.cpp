@@ -4,6 +4,8 @@
 #include <string>
 
 #include "archive/archive_binary.hpp"
+#include "archive/transforms.hpp"
+#include "archive/codec.hpp"
 
 namespace uatc {
 
@@ -11,6 +13,17 @@ void ArchiveWriter::write(
     const std::filesystem::path& archive_path,
     const std::filesystem::path& source_file,
     const std::vector<Block>& blocks
+) {
+    write(archive_path, source_file, blocks,
+          TransformId::None, CodecId::None);
+}
+
+void ArchiveWriter::write(
+    const std::filesystem::path& archive_path,
+    const std::filesystem::path& source_file,
+    const std::vector<Block>& blocks,
+    TransformId transform_id,
+    CodecId codec_id
 ) {
     // --------------------------------------------------------
     // Validate source file
@@ -39,6 +52,13 @@ void ArchiveWriter::write(
 
     const std::uint64_t original_size =
         std::filesystem::file_size(source_file);
+
+    std::vector<std::vector<std::uint8_t>> payloads;
+    payloads.reserve(blocks.size());
+    for (const auto& block : blocks) {
+        auto transformed = Transform::encode(block.data, transform_id);
+        payloads.push_back(Codec::encode(transformed, codec_id));
+    }
 
     ArchiveHeader header;
 
@@ -223,34 +243,17 @@ void ArchiveWriter::write(
 
         // Original length
         writer.write_u64(
-            static_cast<std::uint64_t>(
-                block.data.size()
-            )
+            static_cast<std::uint64_t>(block.data.size())
         );
 
-        // Stored length
-        //
-        // No compression is used yet,
-        // so stored length == original length.
+        // Encoded payload length
         writer.write_u64(
-            static_cast<std::uint64_t>(
-                block.data.size()
-            )
+            static_cast<std::uint64_t>(payloads[&block - blocks.data()].size())
         );
 
-        // Transform
-        writer.write_u8(
-            static_cast<std::uint8_t>(
-                TransformId::None
-            )
-        );
-
-        // Codec
-        writer.write_u8(
-            static_cast<std::uint8_t>(
-                CodecId::None
-            )
-        );
+        // Transform and codec IDs
+        writer.write_u8(static_cast<std::uint8_t>(transform_id));
+        writer.write_u8(static_cast<std::uint8_t>(codec_id));
 
         // Reserved bytes
         writer.write_u16(0);
@@ -262,19 +265,16 @@ void ArchiveWriter::write(
 
         current_payload_offset +=
             static_cast<std::uint64_t>(
-                block.data.size()
+                payloads[&block - blocks.data()].size()
             );
     }
 
     // --------------------------------------------------------
-    // Write raw block payloads
+    // Write encoded block payloads
     // --------------------------------------------------------
 
-    for (const auto& block : blocks) {
-
-        writer.write_bytes(
-            block.data
-        );
+    for (const auto& payload : payloads) {
+        writer.write_bytes(payload);
     }
 }
 
