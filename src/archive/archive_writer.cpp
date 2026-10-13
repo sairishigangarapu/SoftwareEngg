@@ -1,3 +1,4 @@
+
 #include "archive/archive_writer.hpp"
 
 #include <stdexcept>
@@ -14,8 +15,13 @@ void ArchiveWriter::write(
     const std::filesystem::path& source_file,
     const std::vector<Block>& blocks
 ) {
-    write(archive_path, source_file, blocks,
-          TransformId::None, CodecId::None);
+    write(
+        archive_path,
+        source_file,
+        blocks,
+        TransformId::None,
+        CodecId::None
+    );
 }
 
 void ArchiveWriter::write(
@@ -25,10 +31,6 @@ void ArchiveWriter::write(
     TransformId transform_id,
     CodecId codec_id
 ) {
-    // --------------------------------------------------------
-    // Validate source file
-    // --------------------------------------------------------
-
     if (!std::filesystem::exists(source_file)) {
         throw std::runtime_error(
             "Source file does not exist: " +
@@ -43,10 +45,6 @@ void ArchiveWriter::write(
         );
     }
 
-    // --------------------------------------------------------
-    // Prepare metadata
-    // --------------------------------------------------------
-
     const std::string relative_path =
         source_file.filename().generic_string();
 
@@ -55,36 +53,23 @@ void ArchiveWriter::write(
 
     std::vector<std::vector<std::uint8_t>> payloads;
     payloads.reserve(blocks.size());
+
     for (const auto& block : blocks) {
-        auto transformed = Transform::encode(block.data, transform_id);
-        payloads.push_back(Codec::encode(transformed, codec_id));
+        auto transformed =
+            Transform::encode(block.data, transform_id);
+
+        payloads.push_back(
+            Codec::encode(transformed, codec_id)
+        );
     }
 
     ArchiveHeader header;
-
     header.magic = UATC_MAGIC;
-
     header.version = UATC_VERSION;
-
-    header.header_size =
-        UATC_ARCHIVE_HEADER_SIZE;
-
+    header.header_size = UATC_ARCHIVE_HEADER_SIZE;
     header.file_count = 1;
-
     header.block_count =
-        static_cast<std::uint32_t>(
-            blocks.size()
-        );
-
-    // --------------------------------------------------------
-    // Calculate archive layout
-    //
-    // Header
-    // File Record
-    // File Path
-    // Block Index
-    // Payload
-    // --------------------------------------------------------
+        static_cast<std::uint32_t>(blocks.size());
 
     const std::uint64_t header_size =
         UATC_ARCHIVE_HEADER_SIZE;
@@ -95,184 +80,88 @@ void ArchiveWriter::write(
     const std::uint64_t block_record_size =
         UATC_BLOCK_RECORD_SIZE;
 
-    // --------------------------------------------------------
-    // File Table
-    // --------------------------------------------------------
-
-    header.file_table_offset =
-        header_size;
-
-    // --------------------------------------------------------
-    // File Path
-    // --------------------------------------------------------
+    header.file_table_offset = header_size;
 
     const std::uint64_t path_offset =
-        header.file_table_offset +
-        file_record_size;
-
-    // --------------------------------------------------------
-    // Block Index
-    // --------------------------------------------------------
+        header.file_table_offset + file_record_size;
 
     const std::uint64_t block_index_offset =
         path_offset +
-        static_cast<std::uint64_t>(
-            relative_path.size()
-        );
-
-    // --------------------------------------------------------
-    // Payload
-    // --------------------------------------------------------
+        static_cast<std::uint64_t>(relative_path.size());
 
     const std::uint64_t payload_offset =
         block_index_offset +
         block_record_size *
-        static_cast<std::uint64_t>(
-            blocks.size()
-        );
+        static_cast<std::uint64_t>(blocks.size());
 
-    header.block_index_offset =
-        block_index_offset;
-
-    header.payload_offset =
-        payload_offset;
-
-    // --------------------------------------------------------
-    // Open archive
-    // --------------------------------------------------------
+    header.block_index_offset = block_index_offset;
+    header.payload_offset = payload_offset;
 
     BinaryWriter writer(archive_path);
 
-    // --------------------------------------------------------
-    // Write Header
-    // --------------------------------------------------------
+    // Archive header
+    writer.write_u32(header.magic);
+    writer.write_u16(header.version);
+    writer.write_u16(header.header_size);
+    writer.write_u32(header.file_count);
+    writer.write_u32(header.block_count);
+    writer.write_u64(header.file_table_offset);
+    writer.write_u64(header.block_index_offset);
+    writer.write_u64(header.payload_offset);
 
+    // File record
+    writer.write_u32(0);
+    writer.write_u64(path_offset);
     writer.write_u32(
-        header.magic
+        static_cast<std::uint32_t>(relative_path.size())
     );
-
-    writer.write_u16(
-        header.version
-    );
-
-    writer.write_u16(
-        header.header_size
-    );
-
+    writer.write_u64(original_size);
     writer.write_u32(
-        header.file_count
+        blocks.empty() ? 0 : blocks.front().block_id
     );
-
     writer.write_u32(
-        header.block_count
+        static_cast<std::uint32_t>(blocks.size())
     );
 
-    writer.write_u64(
-        header.file_table_offset
-    );
+    // File path
+    writer.write_string(relative_path);
 
-    writer.write_u64(
-        header.block_index_offset
-    );
+    // Block index
+    std::uint64_t current_payload_offset = payload_offset;
 
-    writer.write_u64(
-        header.payload_offset
-    );
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+        const auto& block = blocks[i];
+        const auto& payload = payloads[i];
 
-    // --------------------------------------------------------
-    // Write File Table Record
-    // --------------------------------------------------------
-
-    writer.write_u32(0); // file_id
-
-    writer.write_u64(
-        path_offset
-    );
-
-    writer.write_u32(
-        static_cast<std::uint32_t>(
-            relative_path.size()
-        )
-    );
-
-    writer.write_u64(
-        original_size
-    );
-
-    writer.write_u32(
-        blocks.empty()
-            ? 0
-            : blocks.front().block_id
-    );
-
-    writer.write_u32(
-        static_cast<std::uint32_t>(
-            blocks.size()
-        )
-    );
-
-    // --------------------------------------------------------
-    // Write File Path
-    // --------------------------------------------------------
-
-    writer.write_string(
-        relative_path
-    );
-
-    // --------------------------------------------------------
-    // Write Block Index
-    // --------------------------------------------------------
-
-    std::uint64_t current_payload_offset =
-        payload_offset;
-
-    for (const auto& block : blocks) {
-
-        // File ID
         writer.write_u32(0);
-
-        // Block ID
-        writer.write_u32(
-            block.block_id
-        );
-
-        // Payload offset
-        writer.write_u64(
-            current_payload_offset
-        );
-
-        // Original length
+        writer.write_u32(block.block_id);
+        writer.write_u64(current_payload_offset);
         writer.write_u64(
             static_cast<std::uint64_t>(block.data.size())
         );
-
-        // Encoded payload length
         writer.write_u64(
-            static_cast<std::uint64_t>(payloads[&block - blocks.data()].size())
+            static_cast<std::uint64_t>(payload.size())
         );
 
-        // Transform and codec IDs
-        writer.write_u8(static_cast<std::uint8_t>(transform_id));
-        writer.write_u8(static_cast<std::uint8_t>(codec_id));
+        writer.write_u8(
+            static_cast<std::uint8_t>(transform_id)
+        );
+        writer.write_u8(
+            static_cast<std::uint8_t>(codec_id)
+        );
 
-        // Reserved bytes
+        // Transform parameter occupies the existing two-byte
+        // reserved field. Current transforms use parameter 0.
         writer.write_u16(0);
 
-        // Checksum placeholder.
-        //
-        // A real checksum algorithm will be added later.
+        // Checksum placeholder; checksum support is separate.
         writer.write_u32(0);
 
         current_payload_offset +=
-            static_cast<std::uint64_t>(
-                payloads[&block - blocks.data()].size()
-            );
+            static_cast<std::uint64_t>(payload.size());
     }
 
-    // --------------------------------------------------------
-    // Write encoded block payloads
-    // --------------------------------------------------------
-
+    // Encoded payloads
     for (const auto& payload : payloads) {
         writer.write_bytes(payload);
     }

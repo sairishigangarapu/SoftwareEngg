@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <cstdint>
@@ -25,7 +26,8 @@ private:
         std::uint64_t original_length,
         std::uint64_t stored_length,
         TransformId transform_id,
-        CodecId codec_id
+        CodecId codec_id,
+        std::uint16_t transform_parameter
     );
 };
 
