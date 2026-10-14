@@ -1,3 +1,4 @@
+
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -14,10 +15,7 @@ int main() {
               << std::endl;
 
     try {
-        // ----------------------------------------------------
         // TEST 1: Write binary data
-        // ----------------------------------------------------
-
         {
             uatc::BinaryWriter writer(test_file);
 
@@ -26,18 +24,11 @@ int main() {
             writer.write_u32(0x12345678);
             writer.write_u64(0x1122334455667788ULL);
 
-            std::vector<std::uint8_t> bytes = {
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                255
+            const std::vector<std::uint8_t> bytes = {
+                0, 1, 2, 3, 4, 5, 255
             };
 
             writer.write_bytes(bytes);
-
             writer.write_string("UATC");
 
             std::cout
@@ -45,89 +36,45 @@ int main() {
                 << std::endl;
         }
 
-        // ----------------------------------------------------
-        // TEST 2: Read binary data
-        // ----------------------------------------------------
-
+        // TEST 2: Read and verify binary data
         {
             uatc::BinaryReader reader(test_file);
 
-            const auto value8 = reader.read_u8();
-            const auto value16 = reader.read_u16();
-            const auto value32 = reader.read_u32();
-            const auto value64 = reader.read_u64();
-
-            if (value8 != 0xAB) {
-                std::cerr
-                    << "TEST FAILED: u8 value is incorrect."
-                    << std::endl;
-                return 1;
+            if (reader.read_u8() != 0xAB) {
+                throw std::runtime_error("Incorrect u8 value.");
             }
 
-            if (value16 != 0x1234) {
-                std::cerr
-                    << "TEST FAILED: u16 value is incorrect."
-                    << std::endl;
-                return 1;
+            if (reader.read_u16() != 0x1234) {
+                throw std::runtime_error("Incorrect u16 value.");
             }
 
-            if (value32 != 0x12345678) {
-                std::cerr
-                    << "TEST FAILED: u32 value is incorrect."
-                    << std::endl;
-                return 1;
+            if (reader.read_u32() != 0x12345678) {
+                throw std::runtime_error("Incorrect u32 value.");
             }
 
-            if (value64 != 0x1122334455667788ULL) {
-                std::cerr
-                    << "TEST FAILED: u64 value is incorrect."
-                    << std::endl;
-                return 1;
+            if (reader.read_u64() != 0x1122334455667788ULL) {
+                throw std::runtime_error("Incorrect u64 value.");
             }
 
             std::cout
                 << "TEST PASSED: Integer values were read correctly."
                 << std::endl;
 
-            // ------------------------------------------------
-            // TEST 3: Read raw bytes
-            // ------------------------------------------------
-
             const std::vector<std::uint8_t> expected_bytes = {
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                255
+                0, 1, 2, 3, 4, 5, 255
             };
 
-            const auto actual_bytes =
-                reader.read_bytes(expected_bytes.size());
-
-            if (actual_bytes != expected_bytes) {
-                std::cerr
-                    << "TEST FAILED: Raw bytes are incorrect."
-                    << std::endl;
-                return 1;
+            if (reader.read_bytes(expected_bytes.size())
+                != expected_bytes) {
+                throw std::runtime_error("Incorrect raw bytes.");
             }
 
             std::cout
                 << "TEST PASSED: Raw bytes were read correctly."
                 << std::endl;
 
-            // ------------------------------------------------
-            // TEST 4: Read string
-            // ------------------------------------------------
-
-            const auto text = reader.read_string(4);
-
-            if (text != "UATC") {
-                std::cerr
-                    << "TEST FAILED: String value is incorrect."
-                    << std::endl;
-                return 1;
+            if (reader.read_string(4) != "UATC") {
+                throw std::runtime_error("Incorrect string value.");
             }
 
             std::cout
@@ -135,36 +82,32 @@ int main() {
                 << std::endl;
         }
 
-        // ----------------------------------------------------
-        // TEST 5: Confirm file exists
-        // ----------------------------------------------------
-
+        // TEST 3: Confirm the file exists
         if (!std::filesystem::exists(test_file)) {
-            std::cerr
-                << "TEST FAILED: Test archive file was not created."
-                << std::endl;
-            return 1;
+            throw std::runtime_error(
+                "Test archive file was not created."
+            );
         }
 
         std::cout
             << "TEST PASSED: Archive binary file exists."
             << std::endl;
 
-        // ----------------------------------------------------
-        // Final result
-        // ----------------------------------------------------
-
         std::cout
             << "\nALL ARCHIVE BINARY TESTS PASSED!"
             << std::endl;
 
+        // Remove the generated test file
+        std::filesystem::remove(test_file);
+
         return 0;
     }
     catch (const std::exception& e) {
-        std::cerr
-            << "\nTEST FAILED: "
-            << e.what()
-            << std::endl;
+        std::cerr << "\nTEST FAILED: " << e.what() << std::endl;
+
+        // Clean up generated output even if a test fails
+        std::error_code cleanup_error;
+        std::filesystem::remove(test_file, cleanup_error);
 
         return 1;
     }

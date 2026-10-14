@@ -4,6 +4,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "archive/archive_binary.hpp"
 #include "archive/transforms.hpp"
@@ -45,7 +46,7 @@ std::uint64_t checked_multiply(
     return a * b;
 }
 
-}
+} // namespace
 
 void ArchiveReader::validate_header(
     const ArchiveHeader& header
@@ -116,6 +117,7 @@ void ArchiveReader::validate_block(
         );
     }
 
+    // Raw blocks must store exactly their original number of bytes.
     if (transform_id == TransformId::None &&
         codec_id == CodecId::None &&
         stored_length != original_length) {
@@ -304,15 +306,26 @@ std::vector<std::uint8_t> ArchiveReader::read(
                 static_cast<std::size_t>(block.stored_length)
             );
 
-        auto decoded = Codec::decode(
-            stored_data,
-            block.codec_id
-        );
+        std::vector<std::uint8_t> decoded;
 
-        decoded = Transform::decode(
-            decoded,
-            block.transform_id
-        );
+        // Day 9: Raw blocks already contain the original bytes.
+        // Skip codec and transform decoding for these blocks.
+        if (block.transform_id == TransformId::None &&
+            block.codec_id == CodecId::None) {
+            decoded = stored_data;
+        } else {
+            // Compressed/transformed blocks use the normal
+            // reverse processing order: codec, then transform.
+            decoded = Codec::decode(
+                stored_data,
+                block.codec_id
+            );
+
+            decoded = Transform::decode(
+                decoded,
+                block.transform_id
+            );
+        }
 
         if (decoded.size() != block.original_length) {
             throw std::runtime_error(
@@ -332,4 +345,4 @@ std::vector<std::uint8_t> ArchiveReader::read(
     return result;
 }
 
-}
+} // namespace uatc

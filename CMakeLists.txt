@@ -11,6 +11,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ------------------------------------------------------------
+# Enable CTest
+# ------------------------------------------------------------
+
+include(CTest)
+
+# ------------------------------------------------------------
 # Filesystem library
 # ------------------------------------------------------------
 
@@ -122,6 +128,56 @@ target_link_libraries(uatc_transform_codec_tests
     PRIVATE
         uatc_archive
 )
+
+# ------------------------------------------------------------
+# Register tests with CTest
+# ------------------------------------------------------------
+
+if(BUILD_TESTING)
+
+    add_test(
+        NAME filesystem_tests
+        COMMAND uatc_tests
+    )
+
+    add_test(
+        NAME archive_binary_tests
+        COMMAND uatc_archive_tests
+    )
+
+    add_test(
+        NAME block_tests
+        COMMAND uatc_block_tests
+    )
+
+    add_test(
+        NAME archive_writer_tests
+        COMMAND uatc_archive_writer_tests
+    )
+
+    add_test(
+        NAME archive_reader_tests
+        COMMAND uatc_archive_reader_tests
+    )
+
+    add_test(
+        NAME transform_codec_tests
+        COMMAND uatc_transform_codec_tests
+    )
+
+    # Run tests from the project root so test_data paths work.
+    set_tests_properties(
+        filesystem_tests
+        archive_binary_tests
+        block_tests
+        archive_writer_tests
+        archive_reader_tests
+        transform_codec_tests
+        PROPERTIES
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    )
+
+endif()
 
 # ------------------------------------------------------------
 # MinGW static runtime
