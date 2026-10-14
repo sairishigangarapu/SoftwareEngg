@@ -25,46 +25,75 @@ int main() {
             12, 22, 32, 42
         };
 
+        // Create the input file.
         {
             std::ofstream out(source, std::ios::binary);
+
+            if (!out) {
+                throw std::runtime_error(
+                    "Could not open input file for writing."
+                );
+            }
+
             out.write(
                 reinterpret_cast<const char*>(original.data()),
                 static_cast<std::streamsize>(original.size())
             );
 
             if (!out) {
-                throw std::runtime_error("Could not write input.");
+                throw std::runtime_error(
+                    "Could not write input file."
+                );
             }
         }
 
+        // Split the original data into three blocks.
         const auto blocks = BlockSplitter::split(original, 4);
 
         if (blocks.size() != 3) {
-            throw std::runtime_error("Expected exactly three blocks.");
+            throw std::runtime_error(
+                "Expected exactly three blocks."
+            );
         }
 
+        // Configure each block independently.
         const std::vector<BlockEncoding> encodings = {
+            // Block 1: raw storage.
             {TransformId::None, CodecId::None},
-            {TransformId::Delta, CodecId::None},
+
+            // Block 2: Delta transform + Baseline codec.
+            {TransformId::Delta, CodecId::Baseline},
+
+            // Block 3: raw storage.
             {TransformId::None, CodecId::None}
         };
 
-        ArchiveWriter::write(archive, source, blocks, encodings);
+        // Write the archive with mixed block encodings.
+        ArchiveWriter::write(
+            archive,
+            source,
+            blocks,
+            encodings
+        );
 
+        // Read the archive and verify exact reconstruction.
         const auto extracted = ArchiveReader::read(archive);
 
         if (extracted != original) {
             throw std::runtime_error(
-                "Mixed-transform archive did not reconstruct original bytes."
+                "Mixed raw/encoded archive did not reconstruct "
+                "the original bytes."
             );
         }
 
+        // Clean up test files.
         std::error_code ec;
         fs::remove(source, ec);
         fs::remove(archive, ec);
 
         std::cout
-            << "PASSED: Mixed None/Delta archive round-trip.\n";
+            << "PASSED: Mixed raw and encoded archive round-trip.\n";
+
         return 0;
     }
     catch (const std::exception& e) {
@@ -73,6 +102,7 @@ int main() {
         std::error_code ec;
         fs::remove(source, ec);
         fs::remove(archive, ec);
+
         return 1;
     }
 }
