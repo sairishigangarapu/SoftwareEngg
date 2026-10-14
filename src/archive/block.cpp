@@ -1,6 +1,10 @@
+
 #include "archive/block.hpp"
 
+#include <cstdint>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace uatc {
 
@@ -16,7 +20,6 @@ std::vector<Block> BlockSplitter::split(
 
     std::vector<Block> blocks;
 
-    // Empty input produces zero blocks.
     if (data.empty()) {
         return blocks;
     }
@@ -25,28 +28,20 @@ std::vector<Block> BlockSplitter::split(
     std::uint32_t block_id = 0;
 
     while (offset < data.size()) {
-        const std::size_t remaining =
-            data.size() - offset;
-
+        const std::size_t remaining = data.size() - offset;
         const std::size_t current_size =
-            (remaining < block_size)
-                ? remaining
-                : block_size;
+            (remaining < block_size) ? remaining : block_size;
 
         Block block;
-
         block.block_id = block_id;
-        block.offset =
-            static_cast<std::uint64_t>(offset);
+        block.offset = static_cast<std::uint64_t>(offset);
 
         block.data.assign(
             data.begin() + offset,
             data.begin() + offset + current_size
         );
 
-        blocks.push_back(
-            std::move(block)
-        );
+        blocks.push_back(std::move(block));
 
         offset += current_size;
         ++block_id;
@@ -55,4 +50,4 @@ std::vector<Block> BlockSplitter::split(
     return blocks;
 }
 
-}
+} // namespace uatc

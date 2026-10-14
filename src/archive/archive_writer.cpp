@@ -3,10 +3,11 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "archive/archive_binary.hpp"
-#include "archive/transforms.hpp"
 #include "archive/codec.hpp"
+#include "archive/transforms.hpp"
 
 namespace uatc {
 
@@ -31,6 +32,20 @@ void ArchiveWriter::write(
     TransformId transform_id,
     CodecId codec_id
 ) {
+    std::vector<BlockEncoding> encodings(
+        blocks.size(),
+        BlockEncoding{transform_id, codec_id}
+    );
+
+    write(archive_path, source_file, blocks, encodings);
+}
+
+void ArchiveWriter::write(
+    const std::filesystem::path& archive_path,
+    const std::filesystem::path& source_file,
+    const std::vector<Block>& blocks,
+    const std::vector<BlockEncoding>& encodings
+) {
     if (!std::filesystem::exists(source_file)) {
         throw std::runtime_error(
             "Source file does not exist: " +
@@ -45,6 +60,12 @@ void ArchiveWriter::write(
         );
     }
 
+    if (encodings.size() != blocks.size()) {
+        throw std::invalid_argument(
+            "Each block must have one encoding configuration."
+        );
+    }
+
     const std::string relative_path =
         source_file.filename().generic_string();
 
@@ -54,12 +75,14 @@ void ArchiveWriter::write(
     std::vector<std::vector<std::uint8_t>> payloads;
     payloads.reserve(blocks.size());
 
-    for (const auto& block : blocks) {
-        auto transformed =
-            Transform::encode(block.data, transform_id);
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+        const auto transformed = Transform::encode(
+            blocks[i].data,
+            encodings[i].transform_id
+        );
 
         payloads.push_back(
-            Codec::encode(transformed, codec_id)
+            Codec::encode(transformed, encodings[i].codec_id)
         );
     }
 
@@ -71,31 +94,18 @@ void ArchiveWriter::write(
     header.block_count =
         static_cast<std::uint32_t>(blocks.size());
 
-    const std::uint64_t header_size =
-        UATC_ARCHIVE_HEADER_SIZE;
-
-    const std::uint64_t file_record_size =
-        UATC_FILE_RECORD_SIZE;
-
-    const std::uint64_t block_record_size =
-        UATC_BLOCK_RECORD_SIZE;
-
-    header.file_table_offset = header_size;
+    header.file_table_offset = UATC_ARCHIVE_HEADER_SIZE;
 
     const std::uint64_t path_offset =
-        header.file_table_offset + file_record_size;
+        header.file_table_offset + UATC_FILE_RECORD_SIZE;
 
-    const std::uint64_t block_index_offset =
-        path_offset +
-        static_cast<std::uint64_t>(relative_path.size());
+    header.block_index_offset =
+        path_offset + relative_path.size();
 
-    const std::uint64_t payload_offset =
-        block_index_offset +
-        block_record_size *
+    header.payload_offset =
+        header.block_index_offset +
+        UATC_BLOCK_RECORD_SIZE *
         static_cast<std::uint64_t>(blocks.size());
-
-    header.block_index_offset = block_index_offset;
-    header.payload_offset = payload_offset;
 
     BinaryWriter writer(archive_path);
 
@@ -123,15 +133,15 @@ void ArchiveWriter::write(
         static_cast<std::uint32_t>(blocks.size())
     );
 
-    // File path
     writer.write_string(relative_path);
 
-    // Block index
-    std::uint64_t current_payload_offset = payload_offset;
+    // Block index: metadata is written independently per block.
+    std::uint64_t current_payload_offset = header.payload_offset;
 
     for (std::size_t i = 0; i < blocks.size(); ++i) {
         const auto& block = blocks[i];
         const auto& payload = payloads[i];
+        const auto& encoding = encodings[i];
 
         writer.write_u32(0);
         writer.write_u32(block.block_id);
@@ -142,26 +152,18 @@ void ArchiveWriter::write(
         writer.write_u64(
             static_cast<std::uint64_t>(payload.size())
         );
-
         writer.write_u8(
-            static_cast<std::uint8_t>(transform_id)
+            static_cast<std::uint8_t>(encoding.transform_id)
         );
         writer.write_u8(
-            static_cast<std::uint8_t>(codec_id)
+            static_cast<std::uint8_t>(encoding.codec_id)
         );
-
-        // Transform parameter occupies the existing two-byte
-        // reserved field. Current transforms use parameter 0.
         writer.write_u16(0);
-
-        // Checksum placeholder; checksum support is separate.
         writer.write_u32(0);
 
-        current_payload_offset +=
-            static_cast<std::uint64_t>(payload.size());
+        current_payload_offset += payload.size();
     }
 
-    // Encoded payloads
     for (const auto& payload : payloads) {
         writer.write_bytes(payload);
     }
