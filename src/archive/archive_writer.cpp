@@ -1,6 +1,7 @@
 
 #include "archive/archive_writer.hpp"
 
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -10,6 +11,24 @@
 #include "archive/transforms.hpp"
 
 namespace uatc {
+
+namespace {
+
+// FNV-1a 32-bit checksum of the original block bytes.
+std::uint32_t calculate_checksum(
+    const std::vector<std::uint8_t>& data
+) {
+    std::uint32_t hash = 2166136261u;
+
+    for (const std::uint8_t byte : data) {
+        hash ^= byte;
+        hash *= 16777619u;
+    }
+
+    return hash;
+}
+
+} // namespace
 
 void ArchiveWriter::write(
     const std::filesystem::path& archive_path,
@@ -66,6 +85,15 @@ void ArchiveWriter::write(
         );
     }
 
+    if (blocks.size() >
+        static_cast<std::size_t>(
+            UINT32_MAX
+        )) {
+        throw std::invalid_argument(
+            "Too many blocks for the archive format."
+        );
+    }
+
     const std::string relative_path =
         source_file.filename().generic_string();
 
@@ -75,14 +103,26 @@ void ArchiveWriter::write(
     std::vector<std::vector<std::uint8_t>> payloads;
     payloads.reserve(blocks.size());
 
+    std::vector<std::uint32_t> checksums;
+    checksums.reserve(blocks.size());
+
     for (std::size_t i = 0; i < blocks.size(); ++i) {
+        const auto& original_block = blocks[i];
+
+        checksums.push_back(
+            calculate_checksum(original_block.data)
+        );
+
         const auto transformed = Transform::encode(
-            blocks[i].data,
+            original_block.data,
             encodings[i].transform_id
         );
 
         payloads.push_back(
-            Codec::encode(transformed, encodings[i].codec_id)
+            Codec::encode(
+                transformed,
+                encodings[i].codec_id
+            )
         );
     }
 
@@ -109,7 +149,7 @@ void ArchiveWriter::write(
 
     BinaryWriter writer(archive_path);
 
-    // Archive header
+    // Archive header.
     writer.write_u32(header.magic);
     writer.write_u16(header.version);
     writer.write_u16(header.header_size);
@@ -119,7 +159,7 @@ void ArchiveWriter::write(
     writer.write_u64(header.block_index_offset);
     writer.write_u64(header.payload_offset);
 
-    // File record
+    // File record.
     writer.write_u32(0);
     writer.write_u64(path_offset);
     writer.write_u32(
@@ -135,7 +175,7 @@ void ArchiveWriter::write(
 
     writer.write_string(relative_path);
 
-    // Block index: metadata is written independently per block.
+    // Block index.
     std::uint64_t current_payload_offset = header.payload_offset;
 
     for (std::size_t i = 0; i < blocks.size(); ++i) {
@@ -152,6 +192,7 @@ void ArchiveWriter::write(
         writer.write_u64(
             static_cast<std::uint64_t>(payload.size())
         );
+
         writer.write_u8(
             static_cast<std::uint8_t>(encoding.transform_id)
         );
@@ -159,14 +200,18 @@ void ArchiveWriter::write(
             static_cast<std::uint8_t>(encoding.codec_id)
         );
         writer.write_u16(0);
-        writer.write_u32(0);
 
-        current_payload_offset += payload.size();
+        // Store the checksum of the original, unencoded block.
+        writer.write_u32(checksums[i]);
+
+        current_payload_offset +=
+            static_cast<std::uint64_t>(payload.size());
     }
 
+    // Write encoded block payloads.
     for (const auto& payload : payloads) {
         writer.write_bytes(payload);
     }
 }
 
-}
+} // namespace uatc

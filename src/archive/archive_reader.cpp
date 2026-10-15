@@ -1,14 +1,15 @@
 
 #include "archive/archive_reader.hpp"
 
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "archive/archive_binary.hpp"
-#include "archive/transforms.hpp"
 #include "archive/codec.hpp"
+#include "archive/transforms.hpp"
 
 namespace uatc {
 
@@ -22,6 +23,20 @@ constexpr std::uint64_t FILE_RECORD_SIZE =
 
 constexpr std::uint64_t BLOCK_RECORD_SIZE =
     UATC_BLOCK_RECORD_SIZE;
+
+// FNV-1a 32-bit checksum of the original block data.
+std::uint32_t calculate_checksum(
+    const std::vector<std::uint8_t>& data
+) {
+    std::uint32_t hash = 2166136261u;
+
+    for (const std::uint8_t byte : data) {
+        hash ^= byte;
+        hash *= 16777619u;
+    }
+
+    return hash;
+}
 
 std::uint64_t checked_add(
     std::uint64_t a,
@@ -117,7 +132,6 @@ void ArchiveReader::validate_block(
         );
     }
 
-    // Raw blocks must store exactly their original number of bytes.
     if (transform_id == TransformId::None &&
         codec_id == CodecId::None &&
         stored_length != original_length) {
@@ -197,9 +211,11 @@ std::vector<std::uint8_t> ArchiveReader::read(
     const std::uint64_t path_end =
         checked_add(path_offset, path_length);
 
-    if (path_end > archive_size) {
+    if (path_offset < file_table_end ||
+        path_end > archive_size ||
+        path_end > header.block_index_offset) {
         throw std::runtime_error(
-            "File path extends beyond archive."
+            "File path extends beyond its valid archive region."
         );
     }
 
@@ -225,6 +241,12 @@ std::vector<std::uint8_t> ArchiveReader::read(
         );
     }
 
+    if (header.payload_offset < block_index_end) {
+        throw std::runtime_error(
+            "Payload overlaps the block index."
+        );
+    }
+
     reader.seekg(header.block_index_offset);
 
     struct BlockMetadata {
@@ -235,6 +257,7 @@ std::vector<std::uint8_t> ArchiveReader::read(
         TransformId transform_id;
         CodecId codec_id;
         std::uint16_t transform_parameter;
+        std::uint32_t checksum;
     };
 
     std::vector<BlockMetadata> metadata;
@@ -256,7 +279,7 @@ std::vector<std::uint8_t> ArchiveReader::read(
         const std::uint16_t transform_parameter =
             reader.read_u16();
 
-        reader.read_u32(); // checksum
+        const std::uint32_t checksum = reader.read_u32();
 
         if (block_id != i) {
             throw std::runtime_error(
@@ -273,6 +296,14 @@ std::vector<std::uint8_t> ArchiveReader::read(
             codec_id,
             transform_parameter
         );
+
+        if (stored_length >
+            static_cast<std::uint64_t>(
+                std::numeric_limits<std::size_t>::max())) {
+            throw std::runtime_error(
+                "Stored block exceeds supported size limits."
+            );
+        }
 
         const std::uint64_t payload_end =
             checked_add(payload_offset, stored_length);
@@ -291,11 +322,20 @@ std::vector<std::uint8_t> ArchiveReader::read(
             stored_length,
             transform_id,
             codec_id,
-            transform_parameter
+            transform_parameter,
+            checksum
         });
     }
 
     std::vector<std::uint8_t> result;
+
+    if (original_size >
+        static_cast<std::uint64_t>(result.max_size())) {
+        throw std::runtime_error(
+            "Original file size exceeds supported limits."
+        );
+    }
+
     result.reserve(static_cast<std::size_t>(original_size));
 
     for (const auto& block : metadata) {
@@ -306,16 +346,13 @@ std::vector<std::uint8_t> ArchiveReader::read(
                 static_cast<std::size_t>(block.stored_length)
             );
 
+        // Raw blocks need no transform or codec decoding.
         std::vector<std::uint8_t> decoded;
 
-        // Day 9: Raw blocks already contain the original bytes.
-        // Skip codec and transform decoding for these blocks.
         if (block.transform_id == TransformId::None &&
             block.codec_id == CodecId::None) {
             decoded = stored_data;
         } else {
-            // Compressed/transformed blocks use the normal
-            // reverse processing order: codec, then transform.
             decoded = Codec::decode(
                 stored_data,
                 block.codec_id
@@ -333,7 +370,24 @@ std::vector<std::uint8_t> ArchiveReader::read(
             );
         }
 
-        result.insert(result.end(), decoded.begin(), decoded.end());
+        // Checksum is calculated over the reconstructed original bytes.
+        if (calculate_checksum(decoded) != block.checksum) {
+            throw std::runtime_error(
+                "Block checksum mismatch."
+            );
+        }
+
+        if (decoded.size() > result.max_size() - result.size()) {
+            throw std::runtime_error(
+                "Reconstructed file exceeds supported size limits."
+            );
+        }
+
+        result.insert(
+            result.end(),
+            decoded.begin(),
+            decoded.end()
+        );
     }
 
     if (result.size() != original_size) {
