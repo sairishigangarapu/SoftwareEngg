@@ -19,19 +19,19 @@ int main() {
     const fs::path archive = "mixed_transform_test.uatc";
 
     try {
+        // Four blocks of four bytes each.
         const std::vector<std::uint8_t> original = {
-            10, 20, 30, 40,
-            11, 21, 31, 41,
-            12, 22, 32, 42
+            10, 20, 30, 40,       // Raw
+            50, 60, 70, 80,       // Codec only
+            1, 2, 3, 4,           // Delta + codec
+            7, 7, 7, 7            // RLE + codec
         };
 
-        // Create the input file.
         {
             std::ofstream out(source, std::ios::binary);
-
             if (!out) {
                 throw std::runtime_error(
-                    "Could not open input file for writing."
+                    "Could not open input file."
                 );
             }
 
@@ -47,28 +47,21 @@ int main() {
             }
         }
 
-        // Split the original data into three blocks.
         const auto blocks = BlockSplitter::split(original, 4);
 
-        if (blocks.size() != 3) {
+        if (blocks.size() != 4) {
             throw std::runtime_error(
-                "Expected exactly three blocks."
+                "Expected exactly four blocks."
             );
         }
 
-        // Configure each block independently.
         const std::vector<BlockEncoding> encodings = {
-            // Block 1: raw storage.
             {TransformId::None, CodecId::None},
-
-            // Block 2: Delta transform + Baseline codec.
+            {TransformId::None, CodecId::Baseline},
             {TransformId::Delta, CodecId::Baseline},
-
-            // Block 3: raw storage.
-            {TransformId::None, CodecId::None}
+            {TransformId::RLE, CodecId::Baseline}
         };
 
-        // Write the archive with mixed block encodings.
         ArchiveWriter::write(
             archive,
             source,
@@ -76,23 +69,21 @@ int main() {
             encodings
         );
 
-        // Read the archive and verify exact reconstruction.
         const auto extracted = ArchiveReader::read(archive);
 
         if (extracted != original) {
             throw std::runtime_error(
-                "Mixed raw/encoded archive did not reconstruct "
+                "Mixed-encoding archive did not reconstruct "
                 "the original bytes."
             );
         }
 
-        // Clean up test files.
         std::error_code ec;
         fs::remove(source, ec);
         fs::remove(archive, ec);
 
         std::cout
-            << "PASSED: Mixed raw and encoded archive round-trip.\n";
+            << "PASSED: Mixed raw, codec, Delta and RLE blocks.\n";
 
         return 0;
     }
