@@ -6,8 +6,22 @@ node_modules/
 dist/
 .env
 *.log
-# CMake build directory
+*.o
 build/
+pcomp/build/
+# Test executables (CMake and Makefile builds)
+tests/filesystem_test
+tests/archive_binary_test
+tests/archive_reader_test
+tests/archive_writer_test
+tests/block_test
+tests/transform_codec_test
+tests/mixed_transform_test
+tests/core/trivial_test
+tests/core/block_slice_test
+tests/core/transform_test
+tests/core/codec_test
+tests/core/pipeline_test
+# CommandCode internal
+.commandcode/
 
-# Compiled executables
-*.exe
