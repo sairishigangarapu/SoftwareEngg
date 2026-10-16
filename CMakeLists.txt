@@ -22,6 +22,9 @@ add_library(uatc_core
     src/archive/transforms.cpp
     src/filesystem/file_enumerator.cpp
     src/filesystem/file_reader.cpp
+    src/core/block_stats.cpp
+    src/core/block_slicer.cpp
+    src/core/baseline_entropy_coder.cpp
 )
 
 target_include_directories(uatc_core
@@ -105,6 +108,37 @@ if(BUILD_TESTING)
         COMMAND mixed_transform_test
     )
 
+    # Rishi's core tests (Days 1-5)
+    add_executable(core_trivial_test
+        tests/core/trivial_test.cpp
+    )
+    target_link_libraries(core_trivial_test PRIVATE uatc_core)
+    add_test(NAME core_trivial_tests COMMAND core_trivial_test)
+
+    add_executable(core_block_slice_test
+        tests/core/block_slice_test.cpp
+    )
+    target_link_libraries(core_block_slice_test PRIVATE uatc_core)
+    add_test(NAME core_block_slice_tests COMMAND core_block_slice_test)
+
+    add_executable(core_transform_test
+        tests/core/transform_test.cpp
+    )
+    target_link_libraries(core_transform_test PRIVATE uatc_core)
+    add_test(NAME core_transform_tests COMMAND core_transform_test)
+
+    add_executable(core_codec_test
+        tests/core/codec_test.cpp
+    )
+    target_link_libraries(core_codec_test PRIVATE uatc_core)
+    add_test(NAME core_codec_tests COMMAND core_codec_test)
+
+    add_executable(core_pipeline_test
+        tests/core/pipeline_test.cpp
+    )
+    target_link_libraries(core_pipeline_test PRIVATE uatc_core)
+    add_test(NAME core_pipeline_tests COMMAND core_pipeline_test)
+
     # All tests run from the project root so test_data paths work.
     set_tests_properties(
         filesystem_tests
@@ -114,6 +148,11 @@ if(BUILD_TESTING)
         archive_reader_tests
         transform_codec_tests
         mixed_transform_tests
+        core_trivial_tests
+        core_block_slice_tests
+        core_transform_tests
+        core_codec_tests
+        core_pipeline_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     )
