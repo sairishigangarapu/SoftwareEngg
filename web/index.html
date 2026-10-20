@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UATC</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>UATC</h1>
+    <p>Compress and extract files without losing a single byte.</p>
+  </header>
+
+  <main>
+    <section id="screen-home" class="screen">
+      <h2 tabindex="-1">What do you want to do?</h2>
+      <button id="btn-compress" type="button">Compress</button>
+      <button id="btn-extract" type="button">Extract</button>
+    </section>
+
+    <section id="screen-select" class="screen" hidden>
+      <h2 id="select-title" tabindex="-1">Compress</h2>
+      <label for="source">Source path</label>
+      <input id="source" type="text" placeholder="/home/user/project">
+      <label for="destination">Destination path</label>
+      <input id="destination" type="text" placeholder="/home/user/project.uatc">
+      <details>
+        <summary>Advanced</summary>
+        <label for="workers">Worker threads</label>
+        <input id="workers" type="number" min="1" value="1">
+      </details>
+      <button id="btn-start" type="button">Start</button>
+      <button id="btn-back" type="button">Back</button>
+    </section>
+
+    <section id="screen-progress" class="screen" hidden>
+      <h2 tabindex="-1">Working</h2>
+      <progress id="progress-bar" max="1" value="0"></progress>
+      <p id="progress-text" role="status">0%</p>
+    </section>
+
+    <section id="screen-result" class="screen" hidden>
+      <h2 tabindex="-1">Done</h2>
+      <div id="result-body"></div>
+      <button id="btn-again" type="button">Start over</button>
+    </section>
+
+    <section id="screen-error" class="screen" hidden>
+      <h2 tabindex="-1">Something went wrong</h2>
+      <p id="error-text" role="alert"></p>
+      <button id="btn-error-back" type="button">Start over</button>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
