@@ -25,12 +25,23 @@ add_library(uatc_core
     src/core/block_stats.cpp
     src/core/block_slicer.cpp
     src/core/baseline_entropy_coder.cpp
+    src/archive/archive_inspector.cpp
+    src/archive/archive_verifier.cpp
 )
 
 target_include_directories(uatc_core
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
+# --------------------------------------------------
+# CLI executable
+# --------------------------------------------------
+
+add_executable(uatc
+    src/cli/main.cpp
+)
+
+target_link_libraries(uatc PRIVATE uatc_core)
 
 # --------------------------------------------------
 # Tests
@@ -87,7 +98,24 @@ if(BUILD_TESTING)
         NAME archive_reader_tests
         COMMAND archive_reader_test
     )
-
+    # Archive inspector tests
+    add_executable(archive_inspector_test
+        tests/archive_inspector_test.cpp
+    )
+    target_link_libraries(archive_inspector_test PRIVATE uatc_core)
+    add_test(
+        NAME archive_inspector_tests
+        COMMAND archive_inspector_test
+    )
+    # Archive verifier tests
+    add_executable(archive_verifier_test
+        tests/archive_verifier_test.cpp
+    )
+    target_link_libraries(archive_verifier_test PRIVATE uatc_core)
+    add_test(
+        NAME archive_verifier_tests
+        COMMAND archive_verifier_test
+    )
     # Transform and codec tests
     add_executable(transform_codec_test
         tests/transform_codec_test.cpp
@@ -146,6 +174,8 @@ if(BUILD_TESTING)
         block_tests
         archive_writer_tests
         archive_reader_tests
+	archive_inspector_tests
+	archive_verifier_tests
         transform_codec_tests
         mixed_transform_tests
         core_trivial_tests
