@@ -22,6 +22,10 @@ tests/core/block_slice_test
 tests/core/transform_test
 tests/core/codec_test
 tests/core/pipeline_test
+tests/core/transforms_extended_test
+tests/core/probe_test
+tests/core/selector_test
+tests/core/archive_integration_test
 # CommandCode internal
 .commandcode/
 

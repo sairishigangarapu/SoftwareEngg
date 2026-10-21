@@ -11,6 +11,14 @@ CORE_SRCS = \
 	src/core/block_stats.cpp \
 	src/core/block_slicer.cpp \
 	src/core/baseline_entropy_coder.cpp \
+	src/core/cost_estimator.cpp \
+	src/core/delta_transform.cpp \
+	src/core/xor_transform.cpp \
+	src/core/byte_shuffle_transform.cpp \
+	src/core/rle_transform.cpp \
+	src/core/transform_factory.cpp \
+	src/core/compressibility_probe.cpp \
+	src/core/transform_selector.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
 	src/archive/archive_writer.cpp \
@@ -28,7 +36,11 @@ CORE_TESTS = \
 	tests/core/block_slice_test \
 	tests/core/transform_test \
 	tests/core/codec_test \
-	tests/core/pipeline_test
+	tests/core/pipeline_test \
+	tests/core/transforms_extended_test \
+	tests/core/probe_test \
+	tests/core/selector_test \
+	tests/core/archive_integration_test
 
 CHAKSHU_TESTS = \
 	tests/filesystem_test \
@@ -71,6 +83,18 @@ tests/core/codec_test: tests/core/codec_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/pipeline_test: tests/core/pipeline_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/transforms_extended_test: tests/core/transforms_extended_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/probe_test: tests/core/probe_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/selector_test: tests/core/selector_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/archive_integration_test: tests/core/archive_integration_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Chakshu's tests ----
