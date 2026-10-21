@@ -25,6 +25,14 @@ add_library(uatc_core
     src/core/block_stats.cpp
     src/core/block_slicer.cpp
     src/core/baseline_entropy_coder.cpp
+    src/core/cost_estimator.cpp
+    src/core/delta_transform.cpp
+    src/core/xor_transform.cpp
+    src/core/byte_shuffle_transform.cpp
+    src/core/rle_transform.cpp
+    src/core/transform_factory.cpp
+    src/core/compressibility_probe.cpp
+    src/core/transform_selector.cpp
 )
 
 target_include_directories(uatc_core
@@ -139,6 +147,31 @@ if(BUILD_TESTING)
     target_link_libraries(core_pipeline_test PRIVATE uatc_core)
     add_test(NAME core_pipeline_tests COMMAND core_pipeline_test)
 
+    # Rishi's core tests (Days 6-9)
+    add_executable(core_transforms_extended_test
+        tests/core/transforms_extended_test.cpp
+    )
+    target_link_libraries(core_transforms_extended_test PRIVATE uatc_core)
+    add_test(NAME core_transforms_extended_tests COMMAND core_transforms_extended_test)
+
+    add_executable(core_probe_test
+        tests/core/probe_test.cpp
+    )
+    target_link_libraries(core_probe_test PRIVATE uatc_core)
+    add_test(NAME core_probe_tests COMMAND core_probe_test)
+
+    add_executable(core_selector_test
+        tests/core/selector_test.cpp
+    )
+    target_link_libraries(core_selector_test PRIVATE uatc_core)
+    add_test(NAME core_selector_tests COMMAND core_selector_test)
+
+    add_executable(core_archive_integration_test
+        tests/core/archive_integration_test.cpp
+    )
+    target_link_libraries(core_archive_integration_test PRIVATE uatc_core)
+    add_test(NAME core_archive_integration_tests COMMAND core_archive_integration_test)
+
     # All tests run from the project root so test_data paths work.
     set_tests_properties(
         filesystem_tests
@@ -153,6 +186,10 @@ if(BUILD_TESTING)
         core_transform_tests
         core_codec_tests
         core_pipeline_tests
+        core_transforms_extended_tests
+        core_probe_tests
+        core_selector_tests
+        core_archive_integration_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     )

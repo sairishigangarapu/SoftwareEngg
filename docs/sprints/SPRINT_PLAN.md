@@ -1,9 +1,9 @@
 # UATC Sprint Plan — Rishi_implementation
 
 **Author**: Sai Rishi Gangarapu (Team Lead)  
-**Branch**: `Rishi_implementation`  
+**Branch**: `Rishi_implementation` (Days 1-5), `Rishi_implementation_v2` (Days 6-9)  
 **Scope**: Compression core + adaptive transform engine (FR-04, FR-05, FR-06, FR-07)  
-**Sprint duration**: 1 day each (Day 1 through Day 5)
+**Sprint duration**: 1 day each (Day 1 through Day 9)
 
 ## Sprints
 
@@ -16,7 +16,7 @@
 ### Sprint 2 — Data Structures (Day 2)
 **Goal**: Finalize data structures and IDs for the MVP.
 - [UATC-004] Finalize Block and BlockStats structures (size, unique-byte count, byte-frequency histogram)
-- [UATC-005] Choose and document initial block size for MVP; make configurable
+- [UATC-005] Choose and document initial block size for MVP; make it configurable
 - [UATC-006] Review metadata fields with Chakshu before serialization
 
 ### Sprint 3 — Block Operations (Day 3)
@@ -38,3 +38,19 @@
 - [UATC-015] Define CodecResult and codec IDs
 - [UATC-016] Implement encode/decode tests for random data and repetitive data
 - [UATC-017] Measure encoded size for None→codec on the initial dataset
+
+### Sprint 6 — Extended Transform Set (Days 6-7)
+**Goal**: Complete the v1 candidate set of five reversible transforms.
+- [UATC-018] Implement DeltaTransform (byte-wise differencing) with cost estimate
+- [UATC-019] Implement XorTransform (byte-wise XOR against previous byte)
+- [UATC-020] Implement ByteShuffleTransform (transpose the byte matrix)
+- [UATC-021] Implement RleTransform (run-length encoding as count/value pairs)
+- [UATC-022] Add transform factory as the single source of truth for TransformId → implementation
+- [UATC-023] Add shared cost estimator (fast, deterministic coded-size approximation)
+
+### Sprint 7 — Adaptive Selection (Days 8-9)
+**Goal**: Close the loop: probe, select the cheapest transform, store when it does not pay.
+- [UATC-024] Implement CompressibilityProbe (cheap sampled estimate, FR-05)
+- [UATC-025] Implement TransformSelector (lowest estimated cost, ties to lowest id, FR-06/FR-08)
+- [UATC-026] Add core ↔ archive integration test across the full transform set
+- [UATC-027] Align TransformId values with the SAD and verify Chakshu's archive layer
