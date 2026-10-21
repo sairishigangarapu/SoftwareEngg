@@ -33,6 +33,8 @@ add_library(uatc_core
     src/core/transform_factory.cpp
     src/core/compressibility_probe.cpp
     src/core/transform_selector.cpp
+    src/core/compressor.cpp
+    src/core/error.cpp
     src/archive/archive_inspector.cpp
     src/archive/archive_verifier.cpp
 )
@@ -209,6 +211,12 @@ if(BUILD_TESTING)
     target_link_libraries(core_archive_integration_test PRIVATE uatc_core)
     add_test(NAME core_archive_integration_tests COMMAND core_archive_integration_test)
 
+    add_executable(core_compressor_test
+        tests/core/compressor_test.cpp
+    )
+    target_link_libraries(core_compressor_test PRIVATE uatc_core)
+    add_test(NAME core_compressor_tests COMMAND core_compressor_test)
+
     # All tests run from the project root so test_data paths work.
     set_tests_properties(
         filesystem_tests
@@ -229,6 +237,7 @@ if(BUILD_TESTING)
         core_probe_tests
         core_selector_tests
         core_archive_integration_tests
+        core_compressor_tests
         integration_roundtrip_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

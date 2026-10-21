@@ -3,15 +3,28 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 #include "archive/archive_format.hpp"
 
 namespace uatc {
 
+// A file recovered from an archive: its recorded relative path and contents.
+struct ArchivedFile {
+    std::string relative_path;
+    std::vector<std::uint8_t> data;
+};
+
 class ArchiveReader {
 public:
     static std::vector<std::uint8_t> read(
+        const std::filesystem::path& archive_path
+    );
+
+    // Reads the archive and also reports the relative path it recorded for
+    // the file, so the caller can restore it under the original name.
+    static ArchivedFile read_file(
         const std::filesystem::path& archive_path
     );
 

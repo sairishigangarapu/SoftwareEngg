@@ -150,7 +150,7 @@ void ArchiveReader::validate_block(
     }
 }
 
-std::vector<std::uint8_t> ArchiveReader::read(
+ArchivedFile ArchiveReader::read_file(
     const std::filesystem::path& archive_path
 ) {
     if (!std::filesystem::exists(archive_path)) {
@@ -405,7 +405,13 @@ std::vector<std::uint8_t> ArchiveReader::read(
         );
     }
 
-    return result;
+    return ArchivedFile{path, std::move(result)};
 }
 
-} // namespace uatc
+std::vector<std::uint8_t> ArchiveReader::read(
+    const std::filesystem::path& archive_path
+) {
+    return read_file(archive_path).data;
+}
+
+}  // namespace uatc

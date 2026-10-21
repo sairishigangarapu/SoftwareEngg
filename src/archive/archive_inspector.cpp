@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "archive/archive_binary.hpp"
+#include "core/transform_factory.hpp"
 
 namespace uatc {
 namespace {
@@ -29,13 +30,22 @@ std::uint64_t checked_multiply(std::uint64_t a, std::uint64_t b) {
     return a * b;
 }
 
+// The name comes from the compression core, so the inspector and the CLI
+// always agree with the transform engine.
 std::string transform_name(TransformId id) {
-    switch (id) {
-        case TransformId::None: return "None";
-        case TransformId::RLE: return "RLE";
-        case TransformId::Delta: return "Delta";
+    auto transform = core::make_transform(id);
+    if (!transform) {
+        throw std::runtime_error("Unsupported transform.");
     }
-    throw std::runtime_error("Unsupported transform.");
+    return transform->name();
+}
+
+// True for every transform the compression core registers.
+bool is_known_transform(TransformId id) {
+    for (TransformId candidate : core::candidate_transform_ids()) {
+        if (id == candidate) return true;
+    }
+    return false;
 }
 
 std::string codec_name(CodecId id) {
@@ -205,9 +215,7 @@ ArchiveInfo ArchiveInspector::inspect(
         if (block_id != i) {
             throw std::runtime_error("Block IDs are not sequential.");
         }
-        if (transform_id != TransformId::None &&
-            transform_id != TransformId::RLE &&
-            transform_id != TransformId::Delta) {
+        if (!is_known_transform(transform_id)) {
             throw std::runtime_error("Unsupported transform.");
         }
         if (codec_id != CodecId::None &&

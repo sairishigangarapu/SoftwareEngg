@@ -19,6 +19,8 @@ CORE_SRCS = \
 	src/core/transform_factory.cpp \
 	src/core/compressibility_probe.cpp \
 	src/core/transform_selector.cpp \
+	src/core/compressor.cpp \
+	src/core/error.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
 	src/archive/archive_writer.cpp \
@@ -42,7 +44,8 @@ CORE_TESTS = \
 	tests/core/transforms_extended_test \
 	tests/core/probe_test \
 	tests/core/selector_test \
-	tests/core/archive_integration_test
+	tests/core/archive_integration_test \
+	tests/core/compressor_test
 
 CHAKSHU_TESTS = \
 	tests/filesystem_test \
@@ -105,6 +108,9 @@ tests/core/selector_test: tests/core/selector_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/archive_integration_test: tests/core/archive_integration_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/compressor_test: tests/core/compressor_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Chakshu's tests ----
