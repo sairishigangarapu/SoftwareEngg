@@ -50,6 +50,15 @@ add_executable(uatc
 )
 
 target_link_libraries(uatc PRIVATE uatc_core)
+# Day 4 integration round-trip test
+add_executable(integration_roundtrip_test
+    tests/integration_roundtrip_test.cpp
+)
+target_link_libraries(integration_roundtrip_test PRIVATE uatc_core)
+add_test(
+    NAME integration_roundtrip_tests
+    COMMAND integration_roundtrip_test
+)
 
 # --------------------------------------------------
 # Tests
@@ -207,8 +216,8 @@ if(BUILD_TESTING)
         block_tests
         archive_writer_tests
         archive_reader_tests
-	archive_inspector_tests
-	archive_verifier_tests
+        archive_inspector_tests
+        archive_verifier_tests
         transform_codec_tests
         mixed_transform_tests
         core_trivial_tests
@@ -220,6 +229,7 @@ if(BUILD_TESTING)
         core_probe_tests
         core_selector_tests
         core_archive_integration_tests
+        integration_roundtrip_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     )
