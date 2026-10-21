@@ -26,6 +26,7 @@ tests/core/transforms_extended_test
 tests/core/probe_test
 tests/core/selector_test
 tests/core/archive_integration_test
+tests/core/compressor_test
 tests/archive_inspector_test
 tests/archive_verifier_test
 tests/integration_roundtrip_test

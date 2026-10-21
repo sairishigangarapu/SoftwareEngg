@@ -28,11 +28,12 @@ struct ProbeResult {
 
 class CompressibilityProbe {
  public:
-    // A block is judged compressible when its estimated coded size is smaller
-    // than its original size. The entropy threshold is a secondary signal
-    // used for reporting, not for the decision itself.
-    explicit CompressibilityProbe(double entropy_report_threshold = 7.5)
-        : entropy_threshold_(entropy_report_threshold) {}
+    // A block is judged compressible when its Shannon entropy is below this
+    // threshold, i.e. it holds less than 8 bits of information per byte.
+    // Blocks that are too small for the entropy estimate to be meaningful are
+    // judged by their estimated coded size instead.
+    explicit CompressibilityProbe(double entropy_threshold = 7.5)
+        : entropy_threshold_(entropy_threshold) {}
 
     ProbeResult probe(ByteSpan in) const;
 

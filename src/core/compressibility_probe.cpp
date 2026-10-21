@@ -29,9 +29,19 @@ ProbeResult CompressibilityProbe::probe(ByteSpan in) const {
     result.estimated_ratio =
         static_cast<double>(estimated) / static_cast<double>(sample_n);
 
-    // Compressible when the estimate beats the original by a clear margin.
-    // A 1-byte margin avoids flipping the decision on rounding noise.
-    result.compressible = estimated + 1 < sample_n;
+    if (sample_n < kProbeMinSize) {
+        // Too small for the entropy estimate to mean anything: the maximum
+        // entropy of a short block is only log2(n) bits per byte. Fall back
+        // to the size estimate, demanding a clear 25% margin so that chance
+        // runs of three identical bytes do not read as compressibility.
+        result.compressible = estimated + estimated / 4 < sample_n;
+        return result;
+    }
+
+    // Compressible when the block holds less than 8 bits of information per
+    // byte. Random and already-compressed data sit at ~8 and are rejected;
+    // text, source code and structured numeric data sit well below.
+    result.compressible = result.entropy_bits_per_byte < entropy_threshold_;
     return result;
 }
 
