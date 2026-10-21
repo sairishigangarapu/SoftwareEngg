@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -15,16 +15,23 @@
   <main>
     <section id="screen-home" class="screen">
       <h2 tabindex="-1">What do you want to do?</h2>
-      <button id="btn-compress" type="button">Compress</button>
-      <button id="btn-extract" type="button">Extract</button>
+      <p>Select an operation to get started.</p>
+      <div class="operation-grid">
+        <button id="btn-compress" type="button">Compress</button>
+        <button id="btn-extract" type="button">Extract</button>
+        <button id="btn-info" type="button">Archive Info</button>
+        <button id="btn-verify" type="button">Verify Archive</button>
+      </div>
     </section>
 
     <section id="screen-select" class="screen" hidden>
       <h2 id="select-title" tabindex="-1">Compress</h2>
-      <label for="source">Source path</label>
-      <input id="source" type="text" placeholder="/home/user/project">
+      <label for="source">Source file or archive path</label>
+      <input id="source" type="text" placeholder="Enter a file or archive path" autocomplete="off" >
+      <label for="file-picker">Or select a file from your computer</label>
+      <input id="file-picker" type="file" >
       <label for="destination">Destination path</label>
-      <input id="destination" type="text" placeholder="/home/user/project.uatc">
+      <input id="destination" type="text" placeholder="Enter a file or archive path" autocomplete="off" >
       <details>
         <summary>Advanced</summary>
         <label for="workers">Worker threads</label>
