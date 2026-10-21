@@ -25,6 +25,8 @@ CORE_SRCS = \
 	src/archive/block.cpp \
 	src/archive/codec.cpp \
 	src/archive/transforms.cpp \
+	src/archive/archive_inspector.cpp \
+	src/archive/archive_verifier.cpp \
 	src/filesystem/file_enumerator.cpp \
 	src/filesystem/file_reader.cpp
 
@@ -51,15 +53,23 @@ CHAKSHU_TESTS = \
 	tests/transform_codec_test \
 	tests/mixed_transform_test
 
-ALL_TESTS = $(CORE_TESTS) $(CHAKSHU_TESTS)
+MANASA_TESTS = \
+	tests/archive_inspector_test \
+	tests/archive_verifier_test \
+	tests/integration_roundtrip_test
+
+ALL_TESTS = $(CORE_TESTS) $(CHAKSHU_TESTS) $(MANASA_TESTS)
+
+# ---- CLI executable (info / verify) ----
+CLI_BIN = build/uatc_cli
 
 # ---- pcomp benchmark ----
 PC_BENCH = pcomp/build/pc_bench
 
 # ---- Default target ----
-.PHONY: all bench test clean core-tests chakshu-tests
+.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests
 
-all: $(ALL_TESTS) $(PC_BENCH)
+all: $(ALL_TESTS) $(PC_BENCH) $(CLI_BIN)
 
 # ---- Core library build ----
 build/libuatc_core.a: $(CORE_OBJS)
@@ -119,6 +129,23 @@ tests/transform_codec_test: tests/transform_codec_test.cpp build/libuatc_core.a
 tests/mixed_transform_test: tests/mixed_transform_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
+# ---- Manasa's tests (inspection, verification, round-trip) ----
+tests/archive_inspector_test: tests/archive_inspector_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/archive_verifier_test: tests/archive_verifier_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/integration_roundtrip_test: tests/integration_roundtrip_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+# ---- CLI executable (info / verify) ----
+$(CLI_BIN): src/cli/main.cpp build/libuatc_core.a
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+cli: $(CLI_BIN)
+
 # ---- Run all tests ----
 test: $(ALL_TESTS)
 	@for t in $(ALL_TESTS); do \
@@ -147,3 +174,4 @@ clean:
 	rm -f $(CORE_OBJS) build/libuatc_core.a
 	rm -f $(ALL_TESTS)
 	rm -f $(PC_BENCH)
+	rm -f $(CLI_BIN)
