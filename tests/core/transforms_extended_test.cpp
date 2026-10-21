@@ -45,7 +45,8 @@ int main() {
     std::vector<std::uint8_t> mixed = {0,0,0,0, 1,2,3,4,4,4,4,4, 9,8,7,6,5,5,5,5,5,5};
     std::vector<std::uint8_t> one(1, 0x42);
     std::vector<std::uint8_t> structured(256);
-    for (int i = 0; i < 256; ++i) structured[i] = static_cast<std::uint8_t>((i / 4) & 0xFF);
+    for (int i = 0; i < 256; ++i)
+        structured[i] = static_cast<std::uint8_t>(i % 16);
 
     for (auto* t : {static_cast<Transform*>(&delta), static_cast<Transform*>(&xor_t),
                     static_cast<Transform*>(&shuffle), static_cast<Transform*>(&rle)}) {

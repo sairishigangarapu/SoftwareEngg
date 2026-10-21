@@ -6,12 +6,20 @@ namespace uatc::core {
 
 std::size_t XorTransform::estimateCost(ByteSpan in) const {
     if (in.empty()) return 0;
-    std::size_t cost = (in[0] == 0) ? 0 : 1;
+
+    ByteBuffer transformed;
+    transformed.reserve(in.size);
+    transformed.push_back(in[0]);
+
     for (std::size_t i = 1; i < in.size; ++i) {
-        const std::uint8_t x = static_cast<std::uint8_t>(in[i] ^ in[i - 1]);
-        cost += (x == 0) ? 0 : 1;
+        transformed.push_back(
+            static_cast<std::uint8_t>(in[i] ^ in[i - 1])
+        );
     }
-    return cost + kTransformMetadataOverhead;
+
+    return estimate_coded_size(
+        transformed.data(), transformed.size()
+    ) + kTransformMetadataOverhead;
 }
 
 TransformResult XorTransform::encode(ByteSpan in) const {

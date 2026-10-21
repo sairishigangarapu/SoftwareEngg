@@ -31,7 +31,9 @@ ProbeResult CompressibilityProbe::probe(ByteSpan in) const {
 
     // Compressible when the estimate beats the original by a clear margin.
     // A 1-byte margin avoids flipping the decision on rounding noise.
-    result.compressible = estimated + 1 < sample_n;
+    result.compressible =
+        (estimated + 1 < sample_n) ||
+        (result.entropy_bits_per_byte < entropy_threshold_);
     return result;
 }
 

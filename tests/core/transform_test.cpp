@@ -9,6 +9,7 @@
 
 int main() {
     using namespace uatc::core;
+    using uatc::TransformId;
 
     NoneTransform none;
 

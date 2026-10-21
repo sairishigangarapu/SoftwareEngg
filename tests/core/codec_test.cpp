@@ -7,6 +7,7 @@
 
 int main() {
     using namespace uatc::core;
+    using uatc::CodecId;
 
     BaselineEntropyCoder coder;
 
