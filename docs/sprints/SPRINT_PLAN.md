@@ -54,3 +54,10 @@
 - [UATC-025] Implement TransformSelector (lowest estimated cost, ties to lowest id, FR-06/FR-08)
 - [UATC-026] Add core ↔ archive integration test across the full transform set
 - [UATC-027] Align TransformId values with the SAD and verify Chakshu's archive layer
+
+### Sprint 8 — Integration, Hardening and Demo
+**Goal**: Make the prototype demo-able end to end, and close the remaining gaps against the SAD.
+- [UATC-028] Implement the thread pool — FR-10 parallel block execution (Sampada, open)
+- [UATC-029] Use CRC32 per block and SHA-256 per file/archive (Chakshu + Rishi, open)
+- [UATC-030] Reject path traversal when the archive is extracted to disk (Chakshu + Manasa, open)
+- [UATC-031] CLI compress/extract, Compression Manager, error codes and demo runbook (Rishi + Manasa, delivered)

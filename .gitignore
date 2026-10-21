@@ -32,4 +32,5 @@ tests/archive_verifier_test
 tests/integration_roundtrip_test
 # CommandCode internal
 .commandcode/
+command-code-session-*.html
 
