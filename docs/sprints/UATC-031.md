@@ -1,6 +1,6 @@
 # UATC-031: CLI compress/extract, Compression Manager, error codes and demo runbook
 
-**Sprint**: Sprint 8 (Integration and Demo)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi (with Manasa K for the CLI surface)  
 **Priority**: P1  
 **Requirements**: FR-01, FR-02, FR-03, FR-11, FR-12, FR-15  

@@ -1,6 +1,6 @@
 # UATC-009: Day 3 — Edge Case Tests
 
-**Sprint**: Sprint 3 — Block Operations  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1
 

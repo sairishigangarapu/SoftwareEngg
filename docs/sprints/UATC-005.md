@@ -1,6 +1,6 @@
 # UATC-005: Day 2 — Block Size Configuration
 
-**Sprint**: Sprint 2 — Data Structures  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1
 

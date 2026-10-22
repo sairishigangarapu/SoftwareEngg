@@ -1,6 +1,6 @@
 # UATC-024: Day 8 - CompressibilityProbe
 
-**Sprint**: Sprint 7 (Adaptive Selection)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-05

@@ -1,6 +1,6 @@
 # UATC-027: Day 9 - Transform ID alignment & Chakshu verification
 
-**Sprint**: Sprint 7 (Adaptive Selection)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-02, FR-06, FR-12

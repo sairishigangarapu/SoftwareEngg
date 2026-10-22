@@ -1,6 +1,6 @@
 # UATC-006: Day 2 — Metadata Review with Chakshu
 
-**Sprint**: Sprint 2 — Data Structures  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1  
 **Requirements**: FR-02, FR-04

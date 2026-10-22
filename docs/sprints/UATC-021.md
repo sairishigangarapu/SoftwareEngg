@@ -1,6 +1,6 @@
 # UATC-021: Day 7 - RleTransform
 
-**Sprint**: Sprint 6 (Extended Transform Set)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-06, FR-08

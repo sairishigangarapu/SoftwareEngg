@@ -1,6 +1,6 @@
 # UATC-017: Day 5 — Benchmark Encoded Size
 
-**Sprint**: Sprint 5 — Entropy Coding  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1
 

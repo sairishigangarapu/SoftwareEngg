@@ -1,6 +1,6 @@
 # UATC-028: Implement the thread pool - FR-10 parallel block execution
 
-**Sprint**: Sprint 8 (Parallelism) - continues from pcomp Day 6  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sampada K  
 **Priority**: P0  
 **Requirements**: FR-10, NFR-02  

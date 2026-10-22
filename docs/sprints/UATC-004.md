@@ -1,6 +1,6 @@
 # UATC-004: Day 2 — Finalize Block & BlockStats Structures
 
-**Sprint**: Sprint 2 — Data Structures  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-04, FR-05

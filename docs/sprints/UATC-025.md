@@ -1,6 +1,6 @@
 # UATC-025: Day 9 - TransformSelector
 
-**Sprint**: Sprint 7 (Adaptive Selection)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-06, FR-08

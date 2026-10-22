@@ -1,6 +1,6 @@
 # UATC-007: Day 3 — Block Slicing
 
-**Sprint**: Sprint 3 — Block Operations  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-01, FR-02, FR-04

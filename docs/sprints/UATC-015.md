@@ -1,6 +1,6 @@
 # UATC-015: Day 5 — CodecResult & Codec IDs
 
-**Sprint**: Sprint 5 — Entropy Coding  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1
 

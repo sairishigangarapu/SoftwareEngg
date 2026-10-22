@@ -1,6 +1,6 @@
 # UATC-026: Day 9 - Core ↔ archive integration test
 
-**Sprint**: Sprint 7 (Adaptive Selection)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1  
 **Requirements**: FR-02, FR-03, FR-09

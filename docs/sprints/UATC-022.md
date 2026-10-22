@@ -1,6 +1,6 @@
 # UATC-022: Day 7 - Transform factory
 
-**Sprint**: Sprint 6 (Extended Transform Set)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1  
 **Requirements**: NFR Maintainability

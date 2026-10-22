@@ -1,6 +1,6 @@
 # UATC-030: Reject path traversal when the archive is extracted to disk
 
-**Sprint**: Sprint 8 (Hardening)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: S Chakshu (archive layer) with Manasa K (API and CLI)  
 **Priority**: P1  
 **Requirements**: FR-03, FR-12  

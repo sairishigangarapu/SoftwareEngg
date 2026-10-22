@@ -1,6 +1,6 @@
 # UATC-001: Day 1 — Core Skeleton & Module Boundaries
 
-**Sprint**: Sprint 1 — Core Skeleton  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-04, FR-05, FR-06, FR-07

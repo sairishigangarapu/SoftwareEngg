@@ -223,13 +223,14 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 
 ---
 
-# 12. `docs/` (10 documents plus 32 sprint files)
+# 12. `docs/` (11 documents, including this one, plus 33 sprint files)
 
 | File | What it is |
 |---|---|
 | **core/pipeline.md** | Rishi's design document: the per-block pipeline, the module boundaries with owners, the shared types, the data structures and the transform set table. |
+| **FILE_GUIDE.md** | This file: every file in the repository, what it is, and what each function does. |
 | **DEMO.md** | The demo runbook: what to run, what each step proves, what to say, the exit-code table, and the remaining gaps. |
-| **cli-spec.md** | The CLI contract — `compress`, `extract`, `info`, `verify` and `benchmark` with their arguments, the common options, the exit codes, and example `info` and `verify` output. |
+| **cli-spec.md** | The CLI contract — `stats`, `compress`, `extract`, `info`, `verify` and `benchmark` with their arguments, the common options, the exit codes, and example `stats`, `info` and `verify` output. |
 | **api-contract.md** | The HTTP API the frontend targets: `/api/health`, `/api/fs/list`, `/api/jobs/*` and `/api/archives/info`, with the request and response shapes. Items marked PROPOSED need the team's sign-off. |
 | **error-categories.md** | The full error catalogue, and how the CLI, the API and the UI each report it. |
 | **inspection-data.md** | Exactly what `info` shows, and which archive region each field comes from. |
@@ -237,8 +238,8 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 | **progress-states.md** | The four job states — queued, running, completed, failed — the progress rules and the polling contract. |
 | **wireframes.md** | Low-fidelity text wireframes for all seven screens, showing which API call each one makes. |
 | **PR_DAY_02.md** | The Day 2 pull-request note: what was added and its traceability to FR-11 through FR-15. |
-| **sprints/SPRINT_PLAN.md** | The sprint index: eight sprints and 31 issues, from the Day 1 core skeleton through to the Day 10 demo runbook. |
-| **sprints/UATC-001…031.md** | 31 individual issue cards. UATC-001 to 017 are Rishi's Days 1 to 5; 018 to 027 are Days 6 to 9; 028 to 030 are the open gaps (thread pool, CRC32 and SHA-256, path traversal); 031 is the demo work. Each card has the sprint, the assignee, the priority, the requirements, the tasks and the acceptance criteria. |
+| **sprints/SPRINT_PLAN.md** | The sprint index, organised by milestone: **Milestone 1 (Days 1-5) — MVP Compressor** and **Milestone 2 (Days 6-10) — Adaptive Engine**, each with its goal, its exit criteria, its issue table and its current status. |
+| **sprints/UATC-001…032.md** | 32 individual issue cards. UATC-001 to 017 are Milestone 1, Days 1 to 5; 018 to 027 are Milestone 2, Days 6 to 9; 028 to 030 are the open gaps (thread pool, CRC32 and SHA-256, path traversal); 031 is the demo work and 032 the cost-estimate accuracy. Each card has the milestone, the assignee, the priority, the requirements, the tasks and the acceptance criteria. |
 
 ---
 

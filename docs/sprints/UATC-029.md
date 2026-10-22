@@ -1,6 +1,6 @@
 # UATC-029: Use CRC32 per block and SHA-256 per file/archive
 
-**Sprint**: Sprint 8 (Hardening)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: S Chakshu (archive layer) with Sai Rishi (core)  
 **Priority**: P1  
 **Requirements**: FR-09, FR-12, NFR-03  

@@ -1,6 +1,6 @@
 # UATC-023: Day 7 - Shared cost estimator
 
-**Sprint**: Sprint 6 (Extended Transform Set)  
+**Milestone**: Milestone 2 (Days 6-10) - Adaptive Engine  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P1  
 **Requirements**: FR-06, NFR Performance

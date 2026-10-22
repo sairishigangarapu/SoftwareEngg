@@ -1,6 +1,6 @@
 # UATC-010: Day 4 — NoneTransform
 
-**Sprint**: Sprint 4 — Transform Engine  
+**Milestone**: Milestone 1 (Days 1-5) - MVP Compressor  
 **Assignee**: Sai Rishi Gangarapu (Team Lead)  
 **Priority**: P0  
 **Requirements**: FR-06, FR-08
