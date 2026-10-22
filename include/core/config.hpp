@@ -15,4 +15,9 @@ struct Config {
     std::size_t block_size = kDefaultBlockSize;
 };
 
+// Options for a compression or analysis run.
+struct CompressOptions {
+    std::size_t block_size = kDefaultBlockSize;
+};
+
 }  // namespace uatc::core

@@ -49,7 +49,10 @@ printf '%sDry run - scratch directory %s%s\n' "$DIM" "$WORK" "$RESET"
 # ---------------------------------------------------------------- 1. build
 step "1. Build"
 if make all >"$WORK/build.log" 2>&1; then
-  ok "core library, CLI, benchmark and $(grep -c '^Running' "$WORK/test.log" 2>/dev/null || echo 20) test binaries built"
+  # Count the built test binaries, not the sources: the .cpp files carry the
+  # executable bit on some filesystems.
+  BUILT=$(find tests -type f ! -name '*.cpp' ! -name '*.ps1' | wc -l)
+  ok "core library, CLI, benchmark and $BUILT test binaries built"
 else
   bad "build failed - see $WORK/build.log"; tail -20 "$WORK/build.log"; exit 1
 fi
@@ -82,28 +85,50 @@ open(f"{out}/numeric/float64_signal.bin","wb").write(b"".join(
     struct.pack("<d", math.sin(i/50)) for i in range(150_000)))
 open(f"{out}/binary/zeros.bin","wb").write(b"\x00" * 500_000)
 open(f"{out}/binary/random.bin","wb").write(rng.randbytes(500_000))
+# One file with three different kinds of data in it, so the engine has to
+# switch transforms part way through.
+mixed = bytearray()
+mixed += b"".join(struct.pack("<I", i * 4) for i in range(150_000))   # numeric
+mixed += b"\x00" * 400_000                                          # runs
+mixed += rng.randbytes(400_000)                                     # noise
+open(f"{out}/binary/mixed.bin","wb").write(bytes(mixed))
 PY
 note "text/english.txt        1.4 MB   pseudo-English, Zipf-distributed"
 note "numeric/uint32_table.bin  1.0 MB  mostly-increasing 32-bit records"
 note "numeric/float64_signal.bin 1.2 MB float64 sine signal"
 note "binary/zeros.bin        500 kB   all zeros"
 note "binary/random.bin       500 kB   incompressible random bytes"
+note "binary/mixed.bin        1.4 MB   numeric + runs + noise in one file"
 
 # ------------------------------------------------- 4. compress / inspect
-step "4. Compress and inspect (adaptive per-block transform selection)"
+step "4. Before, during and after compression"
 note "ratio = original / archive; above 1.00 means the file got smaller."
-note "the engine picks a different transform per data type, and stores"
+note "the engine picks a different transform per block, and stores"
 note "incompressible blocks unchanged."
 printf '\n'
+
+# 256 KiB blocks so the per-block decisions are visible on files this size.
+BLOCK_SIZE=262144
+
 for f in "$WORK"/corpus/*/*; do
   name=$(basename "$f")
-  "$PWD/build/uatc_cli" compress "$f" "$WORK/$name.uatc" >/dev/null
-  printf '   %-22s ' "$name"
+  printf '\n   --- %s ---\n' "$name"
+
+  printf '   BEFORE  what the engine plans to do:\n'
+  "$PWD/build/uatc_cli" stats "$f" --block-size "$BLOCK_SIZE" 2>&1 \
+    | sed -n '2,9p' | sed 's/^/     /'
+
+  printf '   DURING  per-block progress:\n'
+  "$PWD/build/uatc_cli" compress "$f" "$WORK/$name.uatc" \
+      --block-size "$BLOCK_SIZE" 2>&1 >/dev/null \
+    | tr '\r' '\n' | grep -E "block" | tail -6 | sed 's/^/     /'
+
+  printf '   AFTER   what the archive actually looks like:\n'
   "$PWD/build/uatc_cli" info "$WORK/$name.uatc" 2>/dev/null \
     | awk -F': +' '/Original bytes/{o=$2} /Archive bytes/{a=$2} /Ratio/{r=$2}
-           /Stored blocks/{s=$2} END{printf "%10s -> %10s bytes   ratio %6s   stored %s\n", o, a, r, s}'
+           /Stored blocks/{s=$2} END{printf "     %10s -> %10s bytes   ratio %6s   stored %s\n", o, a, r, s}'
   "$PWD/build/uatc_cli" info "$WORK/$name.uatc" 2>/dev/null \
-    | sed -n '/^Transforms:/,/^Codecs:/p' | grep -E '^  ' | sed 's/^/       /'
+    | sed -n '/^Transforms:/,/^Codecs:/p' | grep -E '^  ' | sed 's/^/     /'
 done
 
 # ------------------------------------------------------- 5. round trip

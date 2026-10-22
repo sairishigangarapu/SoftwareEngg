@@ -6,8 +6,11 @@
 #include "archive/archive_reader.hpp"
 #include "archive/archive_writer.hpp"
 #include "archive/block.hpp"
+#include "archive/codec.hpp"
+#include "archive/transforms.hpp"
 #include "core/compressibility_probe.hpp"
 #include "core/error.hpp"
+#include "core/planner.hpp"
 #include "core/transform_factory.hpp"
 #include "core/transform_selector.hpp"
 #include "filesystem/file_reader.hpp"
@@ -17,7 +20,8 @@ namespace uatc::core {
 CompressResult CompressionManager::compress(
     const std::filesystem::path& source,
     const std::filesystem::path& archive,
-    const CompressOptions& options
+    const CompressOptions& options,
+    ProgressSink* progress
 ) {
     if (!std::filesystem::exists(source)) {
         throw UatcError(ErrorCode::NotFound,
@@ -39,34 +43,53 @@ CompressResult CompressionManager::compress(
     const TransformSelector selector(registry);
     const CompressibilityProbe probe;
 
-    std::vector<BlockEncoding> encodings;
-    encodings.reserve(blocks.size());
+    std::vector<CodedBlock> coded;
+    coded.reserve(blocks.size());
 
     CompressResult result;
     result.originalBytes = data.size();
     result.blockCount = blocks.size();
 
-    for (const auto& block : blocks) {
-        BlockEncoding encoding;
+    // Plan, encode and report each block in turn. The plan and the outcome
+    // come from the same planner, so the progress report is the truth.
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+        const auto& block = blocks[i];
 
-        if (probe.is_compressible(ByteSpan(block.data))) {
-            // Compressible: pick the cheapest transform for this block.
-            const auto selection = selector.select(ByteSpan(block.data));
-            encoding.transform_id = selection.transform_id;
-            encoding.codec_id = CodecId::Baseline;
-            ++result.compressedBlocks;
-        } else {
+        const auto plan = plan_block(ByteSpan(block.data), i, block.offset,
+                                     selector, probe);
+
+        CodedBlock entry;
+        entry.transform_id = plan.transformId;
+        entry.codec_id = plan.codecId;
+
+        if (plan.stored) {
             // Incompressible: keep the original bytes (FR-08).
-            encoding.transform_id = TransformId::None;
-            encoding.codec_id = CodecId::None;
+            entry.payload = block.data;
             ++result.storedBlocks;
+        } else {
+            // Qualified: inside uatc::core, the unqualified names would
+            // resolve to the core's Transform and EntropyCoder interfaces.
+            entry.payload = uatc::Transform::encode(block.data, plan.transformId);
+            entry.payload = uatc::Codec::encode(entry.payload, plan.codecId);
+            ++result.compressedBlocks;
         }
 
-        ++result.transformUsage[encoding.transform_id];
-        encodings.push_back(encoding);
+        ++result.transformUsage[entry.transform_id];
+        coded.push_back(std::move(entry));
+
+        if (progress != nullptr) {
+            BlockProgress update;
+            update.blockIndex = i;
+            update.blockCount = blocks.size();
+            update.bytesIn = block.data.size();
+            update.bytesOut = coded.back().payload.size();
+            update.transformId = plan.transformId;
+            update.stored = plan.stored;
+            progress->on_block(update);
+        }
     }
 
-    ArchiveWriter::write(archive, source, blocks, encodings);
+    ArchiveWriter::write(archive, source, blocks, coded);
 
     result.archiveBytes = std::filesystem::file_size(archive);
     if (result.archiveBytes > 0) {

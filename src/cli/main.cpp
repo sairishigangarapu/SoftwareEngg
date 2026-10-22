@@ -8,6 +8,8 @@
 #include "core/compressor.hpp"
 #include "core/config.hpp"
 #include "core/error.hpp"
+#include "core/planner.hpp"
+#include "core/progress.hpp"
 #include "core/transform_factory.hpp"
 #include "core/transform_selector.hpp"
 #include "filesystem/file_reader.hpp"
@@ -29,11 +31,13 @@ void print_help() {
         << "UATC - Universal Adaptive Transform Compression\n\n"
         << "Usage:\n"
         << "  uatc --help\n"
+        << "  uatc stats <input> [--block-size BYTES]\n"
         << "  uatc compress <input> <output.uatc> [--block-size BYTES] [--quiet]\n"
         << "  uatc extract <archive.uatc> <output-dir> [--quiet]\n"
         << "  uatc info <archive.uatc>\n"
         << "  uatc verify <archive.uatc>\n\n"
         << "Commands:\n"
+        << "  stats    Analyse a file and report what the engine will do to it.\n"
         << "  compress  Compress a file into a .uatc archive.\n"
         << "  extract   Restore the contents of a .uatc archive.\n"
         << "  info      Display archive metadata without decoding payloads.\n"
@@ -41,7 +45,9 @@ void print_help() {
         << "Options:\n"
         << "  --block-size BYTES   Block size to split the input into "
         << "(default 1 MiB).\n"
-        << "  --quiet              Print only errors.\n";
+        << "  --quiet              Print only errors.\n\n"
+        << "Progress goes to stderr, results go to stdout, so the output\n"
+        << "can be piped and scripted.\n";
 }
 
 // The name comes from the compression core, so the CLI always agrees with the
@@ -51,6 +57,25 @@ const char* transform_name(uatc::TransformId id) {
     auto transform = uatc::core::make_transform(id);
     name = transform ? transform->name() : "Unknown";
     return name.c_str();
+}
+
+// A fixed-width label for a transform, for the aligned progress and stats
+// tables.
+const char* transform_label(uatc::TransformId id) {
+    switch (id) {
+        case uatc::TransformId::None:
+            return "None";
+        case uatc::TransformId::Delta:
+            return "Delta";
+        case uatc::TransformId::Xor:
+            return "XOR";
+        case uatc::TransformId::ByteShuffle:
+            return "ByteShuffle";
+        case uatc::TransformId::RLE:
+            return "RLE";
+        default:
+            return "Unknown";
+    }
 }
 
 const char* codec_name(uatc::CodecId id) {
@@ -151,6 +176,81 @@ int print_verify(const std::filesystem::path& path) {
     return 0;
 }
 
+// Prints the per-block progress of a compression run to stderr, so that
+// stdout stays clean for the final result.
+class ConsoleProgressSink : public uatc::core::ProgressSink {
+ public:
+    void on_block(const uatc::core::BlockProgress& p) override {
+        ++blocks_;
+        bytesIn_ += p.bytesIn;
+        bytesOut_ += p.bytesOut;
+
+        const double percent =
+            p.blockCount ? (100.0 * static_cast<double>(blocks_) /
+                            static_cast<double>(p.blockCount))
+                         : 0.0;
+
+        std::cerr << "\r  block " << std::setw(4) << blocks_ << "/"
+                  << p.blockCount << "  " << std::setw(10) << p.bytesIn
+                  << " -> " << std::setw(10) << p.bytesOut << " B  "
+                  << std::setw(11) << std::left
+                  << (p.stored ? "stored" : transform_label(p.transformId))
+                  << std::right << "  " << std::fixed << std::setprecision(1)
+                  << percent << "%   " << std::flush;
+    }
+
+    void finish() {
+        if (blocks_ > 0) std::cerr << '\n';
+    }
+
+ private:
+    std::uint64_t blocks_ = 0;
+    std::uint64_t bytesIn_ = 0;
+    std::uint64_t bytesOut_ = 0;
+};
+
+int print_stats(const std::filesystem::path& input, std::size_t block_size) {
+    uatc::core::CompressOptions options;
+    options.block_size = block_size;
+
+    const auto report = uatc::core::analyze(input, options);
+
+    std::cout
+        << "File:              " << input.string() << '\n'
+        << "Size:              " << report.totalBytes << " bytes\n"
+        << "Block size:        " << block_size << " bytes\n"
+        << "Blocks:            " << report.blockCount << '\n'
+        << "Entropy:           " << std::fixed << std::setprecision(3)
+        << report.overallEntropy << " bits/byte\n"
+        << "Compressible:      " << report.compressibleBlocks << " block(s)\n"
+        << "Stored as-is:      " << report.storedBlocks << " block(s)\n"
+        << "Predicted archive: " << report.estimatedArchiveBytes << " bytes\n"
+        << "Predicted ratio:   " << std::fixed << std::setprecision(2)
+        << report.estimatedRatio << '\n';
+
+    std::cout << "\nThe prediction comes from the fast cost estimator, so it is\n"
+                 "an upper bound: the real archive can come out smaller.\n";
+
+    std::cout << "\nPer block:\n"
+              << "  #   offset      size   entropy  unique  transform"
+              << "        predicted\n";
+
+    for (const auto& block : report.blocks) {
+        std::cout
+            << "  " << std::setw(2) << block.index
+            << "  " << std::setw(9) << block.offset
+            << "  " << std::setw(8) << block.size
+            << "  " << std::fixed << std::setprecision(3) << std::setw(7)
+            << block.entropy
+            << "  " << std::setw(6) << block.uniqueBytes
+            << "  " << std::setw(12) << std::left
+            << (block.stored ? "stored" : transform_label(block.transformId))
+            << std::right << "  " << std::setw(11)
+            << block.estimatedCost << '\n';
+    }
+
+    return 0;
+}
 int compress_file(const std::filesystem::path& input,
                   const std::filesystem::path& output,
                   std::size_t block_size,
@@ -158,8 +258,10 @@ int compress_file(const std::filesystem::path& input,
     uatc::core::CompressOptions options;
     options.block_size = block_size;
 
-    const auto result =
-        uatc::core::CompressionManager::compress(input, output, options);
+    ConsoleProgressSink sink;
+    const auto result = uatc::core::CompressionManager::compress(
+        input, output, options, quiet ? nullptr : &sink);
+    sink.finish();
 
     if (quiet) {
         return 0;
@@ -229,6 +331,37 @@ int main(int argc, char* argv[]) {
     const std::string command = argv[1];
 
     try {
+        if (command == "stats") {
+            if (argc < 3) {
+                print_help();
+                std::cerr << "\nerror: E_INVALID_ARGUMENT: "
+                          << "stats needs an input path.\n";
+                return 2;
+            }
+
+            const std::filesystem::path input = argv[2];
+            std::size_t block_size = uatc::core::kDefaultBlockSize;
+
+            for (int i = 3; i < argc; ++i) {
+                if (std::string(argv[i]) == "--block-size" && i + 1 < argc) {
+                    try {
+                        block_size = parse_size(argv[++i], "--block-size");
+                    } catch (const std::exception& error) {
+                        std::cerr << "error: E_INVALID_ARGUMENT: "
+                                  << error.what() << '\n';
+                        return 2;
+                    }
+                } else {
+                    print_help();
+                    std::cerr << "\nerror: E_INVALID_ARGUMENT: unknown option: "
+                              << argv[i] << '\n';
+                    return 2;
+                }
+            }
+
+            return print_stats(input, block_size);
+        }
+
         if (command == "compress") {
             if (argc < 4) {
                 print_help();

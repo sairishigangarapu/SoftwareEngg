@@ -14,12 +14,9 @@
 
 #include "archive/archive_format.hpp"
 #include "core/config.hpp"
+#include "core/progress.hpp"
 
 namespace uatc::core {
-
-struct CompressOptions {
-    std::size_t block_size = kDefaultBlockSize;
-};
 
 struct CompressResult {
     std::uint64_t originalBytes = 0;
@@ -41,10 +38,12 @@ class CompressionManager {
  public:
     // Compresses a file into a .uatc archive. Each block is probed and, if it
     // is worth compressing, the cheapest transform is selected for it.
+    // If a sink is given, it is notified after every block.
     static CompressResult compress(
         const std::filesystem::path& source,
         const std::filesystem::path& archive,
-        const CompressOptions& options = CompressOptions{}
+        const CompressOptions& options = CompressOptions{},
+        ProgressSink* progress = nullptr
     );
 
     // Restores the file held in an archive under the output directory, using

@@ -58,14 +58,14 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 | **block.hpp** | `Block` (block_id, offset, data vector, `size()`) and `BlockSplitter::split(data, block_size)` — Chakshu's block splitter. |
 | **codec.hpp** | `Codec::encode(input, CodecId)` and `Codec::decode(input, CodecId)` — the archive layer's thin wrapper over the baseline PackBits-style coder. |
 | **transforms.hpp** | `Transform::encode(input, TransformId)` and `Transform::decode(input, TransformId)` — the archive layer's thin wrapper; now delegates to the core's transform factory. |
-| **archive_writer.hpp** | `BlockEncoding {transform_id, codec_id}`. `ArchiveWriter::write()` in three overloads: raw, uniform transform plus codec, and **per-block** encodings. |
+| **archive_writer.hpp** | `BlockEncoding {transform_id, codec_id}` and `CodedBlock {transform_id, codec_id, payload}` for a block that has already been transformed and coded. `ArchiveWriter::write()` in four overloads: raw, uniform transform plus codec, per-block encodings, and pre-coded blocks. |
 | **archive_reader.hpp** | `ArchivedFile {relative_path, data}`. `ArchiveReader::read()` returns the bytes; `read_file()` returns the bytes **plus** the recorded relative path, so extraction can restore the original filename. |
 | **archive_inspector.hpp** | `TransformUsage`, `CodecUsage`, `ArchiveInfo` (path, formatVersion, fileCount, blockCount, originalBytes, archiveBytes, ratio, storedBlocks, compressedBlocks, usage vectors). `ArchiveInspector::inspect()` reads metadata **without** decoding payloads. |
 | **archive_verifier.hpp** | `VerificationResult {success, filesChecked, blocksChecked, message}`. `ArchiveVerifier::verify()` validates an archive and writes nothing to disk. |
 
 ---
 
-# 3. `include/core/` — Rishi's compression core (20 headers)
+# 3. `include/core/` — Rishi's compression core (22 headers)
 
 | File | Contents |
 |---|---|
@@ -88,6 +88,8 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 | **compressibility_probe.hpp** | `kProbeSampleSize = 64 KiB`, `kProbeMinSize = 64`, `ProbeResult {compressible, entropy_bits_per_byte, estimated_ratio, sampled_bytes}` and `CompressibilityProbe::probe()`. |
 | **transform_selector.hpp** | `SelectionResult {transform_id, transformed, estimated_cost, original_size, stored_raw}` and `TransformSelector::select(ByteSpan)`. |
 | **compressor.hpp** | `CompressOptions`, `CompressResult`, `ExtractResult`, and `CompressionManager::compress()` / `extract()` — the pipeline orchestrator (SAD §3.4). |
+| **planner.hpp** | `BlockPlan` (what the engine will do with one block), `AnalysisReport` (the whole-file prediction), `plan_block()` and `analyze()`. The planner drives both the "before" report and the real compression, so the two can never disagree. |
+| **progress.hpp** | `BlockProgress` (one block's update) and the `ProgressSink` interface from SAD §4.3.3, plus `NullProgressSink` for callers that do not want progress. |
 | **error.hpp** | `ErrorCode` (11 values), `error_code_name()` returning the `E_*` strings, `error_exit_code()` returning the SAD §4.3.4 exit codes, and the `UatcError` exception that carries a code. |
 
 ---
@@ -117,7 +119,7 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 
 ---
 
-# 6. `src/cli/main.cpp` — the CLI (1 file, 349 lines)
+# 6. `src/cli/main.cpp` — the CLI (1 file, 481 lines)
 
 | Function | What it does |
 |---|---|
@@ -133,7 +135,7 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 
 ---
 
-# 7. `src/core/` — compression core implementations (13)
+# 7. `src/core/` — compression core implementations (14)
 
 | File | What it does |
 |---|---|
@@ -148,7 +150,8 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 | **transform_factory.cpp** | `make_transform()` switches to the right subclass. `candidate_transform_ids()` returns the five IDs in order. `make_default_registry()` builds a registry holding all of them. |
 | **compressibility_probe.cpp** | `probe()` samples the head of the block (64 KiB), computes the statistics and entropy, and estimates the coded size. **Blocks of at least 64 bytes are judged by entropy below 7.5 bits per byte**; smaller blocks fall back to the size estimate with a 25% margin, because a short block's maximum entropy is only `log2(n)` bits per byte. Empty input is never compressible. |
 | **transform_selector.cpp** | `select()` scores every registered transform with `estimateCost` and keeps the strictly lowest, so ties resolve to the lowest ID as ADR-05 requires. It then applies the store decision: if the best cost is not smaller than the original size, the block is stored raw with `TransformId::None`. |
-| **compressor.cpp** | `CompressionManager::compress()` validates the input, splits it into blocks, probes each one, selects a transform for the compressible ones, stores the rest, writes the archive with per-block encodings, and returns the statistics. `extract()` reads the archive together with its recorded path, **rejects absolute paths and `..` segments** with `E_PATH_TRAVERSAL`, creates the directories and writes the file. |
+| **compressor.cpp** | `CompressionManager::compress()` validates the input, splits it into blocks, plans each one, encodes it, reports the progress, and writes the archive with per-block encodings. `extract()` reads the archive together with its recorded path, **rejects absolute paths and `..` segments** with `E_PATH_TRAVERSAL`, creates the directories and writes the file. |
+| **planner.cpp** | `plan_block()` — the per-block decision: measure the entropy, ask the probe, and either pick the cheapest transform or mark the block as stored. `analyze()` — runs the planner over every block of a file to produce the "before" report, without writing anything. |
 | **error.cpp** | `error_code_name()` returns `E_INVALID_ARGUMENT`, `E_NOT_FOUND`, `E_PERMISSION`, `E_IO`, `E_MALFORMED_ARCHIVE`, `E_UNSUPPORTED_VERSION`, `E_MISSING_BLOCK`, `E_BLOCK_CHECKSUM`, `E_ARCHIVE_CHECKSUM`, `E_PATH_TRAVERSAL` or `E_INTERNAL`. `error_exit_code()` returns 2, 3, 4, 5, 10, 11, 12, 13, 14, 15 or 1. |
 
 ---
@@ -180,7 +183,7 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 
 ---
 
-# 10. `tests/core/` — Rishi's tests (10)
+# 10. `tests/core/` — Rishi's tests (11)
 
 | File | Coverage |
 |---|---|
@@ -194,6 +197,7 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 | **selector_test.cpp** | Day 9. A numeric ramp selects Delta; a long run selects RLE; random data is stored raw; an empty block resolves to the lowest ID; every selected transform round-trips; the selection is deterministic; and **different blocks of one file get different transforms**. |
 | **archive_integration_test.cpp** | Day 9. Every transform through the archive layer, with the raw and the baseline codec; mixed per-block transforms in one archive; the adaptive pipeline producing an archive the layer can read; and a corrupted payload still being detected. |
 | **compressor_test.cpp** | Day 10. `CompressionManager`: compress, inspect, verify, extract and compare byte for byte; an incompressible file is stored rather than squeezed; compressible data really does compress; `E_NOT_FOUND` is raised for a missing input; a zero block size is rejected; and the full error-code to exit-code table is asserted. |
+| **planner_test.cpp** | Day 10. The plan and the run must agree: the same transform for every block, the same stored-versus-compressed counts, and the same byte totals. Also covers a missing input, a zero block size, and that `NullProgressSink` counts what the real sink reports. |
 
 ---
 

@@ -65,6 +65,33 @@ void ArchiveWriter::write(
     const std::vector<Block>& blocks,
     const std::vector<BlockEncoding>& encodings
 ) {
+    std::vector<CodedBlock> coded(
+        blocks.size(),
+        CodedBlock{}
+    );
+
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+        coded[i].transform_id = encodings[i].transform_id;
+        coded[i].codec_id = encodings[i].codec_id;
+        coded[i].payload = Transform::encode(
+            blocks[i].data,
+            encodings[i].transform_id
+        );
+        coded[i].payload = Codec::encode(
+            coded[i].payload,
+            encodings[i].codec_id
+        );
+    }
+
+    write(archive_path, source_file, blocks, coded);
+}
+
+void ArchiveWriter::write(
+    const std::filesystem::path& archive_path,
+    const std::filesystem::path& source_file,
+    const std::vector<Block>& blocks,
+    const std::vector<CodedBlock>& coded
+) {
     if (!std::filesystem::exists(source_file)) {
         throw std::runtime_error(
             "Source file does not exist: " +
@@ -79,7 +106,7 @@ void ArchiveWriter::write(
         );
     }
 
-    if (encodings.size() != blocks.size()) {
+    if (coded.size() != blocks.size()) {
         throw std::invalid_argument(
             "Each block must have one encoding configuration."
         );
@@ -100,29 +127,12 @@ void ArchiveWriter::write(
     const std::uint64_t original_size =
         std::filesystem::file_size(source_file);
 
-    std::vector<std::vector<std::uint8_t>> payloads;
-    payloads.reserve(blocks.size());
-
     std::vector<std::uint32_t> checksums;
     checksums.reserve(blocks.size());
 
-    for (std::size_t i = 0; i < blocks.size(); ++i) {
-        const auto& original_block = blocks[i];
-
+    for (const auto& block : blocks) {
         checksums.push_back(
-            calculate_checksum(original_block.data)
-        );
-
-        const auto transformed = Transform::encode(
-            original_block.data,
-            encodings[i].transform_id
-        );
-
-        payloads.push_back(
-            Codec::encode(
-                transformed,
-                encodings[i].codec_id
-            )
+            calculate_checksum(block.data)
         );
     }
 
@@ -180,8 +190,8 @@ void ArchiveWriter::write(
 
     for (std::size_t i = 0; i < blocks.size(); ++i) {
         const auto& block = blocks[i];
-        const auto& payload = payloads[i];
-        const auto& encoding = encodings[i];
+        const auto& payload = coded[i].payload;
+        const auto& encoding = coded[i];
 
         writer.write_u32(0);
         writer.write_u32(block.block_id);
@@ -209,8 +219,8 @@ void ArchiveWriter::write(
     }
 
     // Write encoded block payloads.
-    for (const auto& payload : payloads) {
-        writer.write_bytes(payload);
+    for (const auto& block : coded) {
+        writer.write_bytes(block.payload);
     }
 }
 

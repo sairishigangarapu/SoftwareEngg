@@ -7,10 +7,21 @@ General form:  uatc <command> [arguments] [options]
 
 ## Commands
 
+uatc stats <input> [--block-size BYTES]
+  Analyses the file and reports what the engine will do to it, without
+  writing anything: the size, the overall entropy, the per-block entropy
+  and unique-byte count, whether each block is compressible, the transform
+  that will be selected for it, and the predicted archive size and ratio.
+  The prediction comes from the fast cost estimator, so it is an upper
+  bound: the real archive can come out smaller.
+
 uatc compress <input> <output.uatc> [--workers N] [--block-size BYTES]
   input is a file or a directory. Writes the archive to output.uatc.
   Example: uatc compress ./dataset.bin ./dataset.uatc --workers 8
   Same input with --workers 1 must give a byte-identical archive (FR-10).
+  Reports per-block progress on stderr as each block is processed: the
+  block number, the bytes in and out, the transform chosen, and the
+  percentage complete.
 
 uatc extract <archive.uatc> <output-dir>
   Restores files and folders under output-dir, byte for byte.
@@ -36,7 +47,6 @@ uatc --help, uatc <command> --help
 --workers N      worker threads (default: chosen by the core)
 --block-size N   block size in bytes (default 1 MiB)
 --quiet          only errors
---verbose        extra detail
 
 Progress goes to stderr, results go to stdout, so output can be scripted.
 
@@ -73,3 +83,32 @@ Codecs:       raw 41, Huffman 659
 OK: 12 files, 700 blocks verified.
 or
 error: E_BLOCK_CHECKSUM: block 213 failed its checksum.
+
+## Example `stats` output
+
+File:              ./dataset.bin
+Size:              1000000 bytes
+Block size:        262144 bytes
+Blocks:            4
+Entropy:           5.505 bits/byte
+Compressible:      3 block(s)
+Stored as-is:      1 block(s)
+Predicted archive: 830442 bytes
+Predicted ratio:   1.69
+
+The prediction comes from the fast cost estimator, so it is
+an upper bound: the real archive can come out smaller.
+
+Per block:
+  #   offset      size   entropy  unique  transform        predicted
+   0          0     65536    4.981     256  ByteShuffle         32645
+   1      65536     65536    5.465     256  ByteShuffle         49023
+   2     131072     65536    5.465     256  ByteShuffle         49025
+   3     196608     65536    8.000     256  stored             65536
+
+## Example `compress` progress (stderr)
+
+  block    1/4     262144 ->      76288 B  ByteShuffle  25.0%
+  block    2/4     262144 ->      76288 B  ByteShuffle  50.0%
+  block    3/4     262144 ->      24964 B  ByteShuffle  75.0%
+  block    4/4     262144 ->     262144 B  stored      100.0%

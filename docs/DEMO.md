@@ -25,12 +25,47 @@ nothing in the repository is touched.
 | Step | What it demonstrates | Say |
 |------|--------------------|-----|
 | 1. Build | The C++17 core, archive layer, CLI and benchmark all compile from one command | "Everything is C++17 with CMake; this Makefile is the fallback for machines without cmake." |
-| 2. Tests | 20 test suites, unit + integration, all green | "Every module has tests written alongside it, as the STP requires." |
-| 3. Corpus | Five data shapes: text, structured numeric, float signal, zeros, random | "We test against several data categories, not just one." |
-| 4. Compress + inspect | **The core idea**: a different transform is chosen per block, and incompressible data is stored unchanged | "This is the adaptive engine. Numeric records get byte-shuffle and shrink 3.4x. Text gets delta. Random bytes and gzip data are recognised as incompressible and stored as-is, so the archive never grows." |
+| 2. Tests | 21 test suites, unit + integration, all green | "Every module has tests written alongside it, as the STP requires." |
+| 3. Corpus | Six data shapes: text, structured numeric, float signal, zeros, random, and one file with all three mixed together | "We test against several data categories, not just one." |
+| 4. Before, during and after | **The core idea**: the engine's plan for the file, its per-block progress while it runs, and the archive it actually produced | "First it tells us what it intends to do — this is the prediction. Then it works block by block, and you can see it pick a different transform for each block. Then here is the result. In the mixed file it uses byte-shuffle for the numeric part and leaves the random part alone." |
 | 5. Round trip | Every file restored **byte for byte**, SHA-256 shown | "Correctness is a hard requirement. Every extracted file matches the original exactly." |
 | 6. Integrity | Flip one byte in a valid archive, verification catches it and reports the error code | "Corruption is always detected and reported, never silently turned into wrong output. The exit code maps to the error table in the SAD." |
 | 7. Benchmark | Throughput on the raw path | "The benchmark harness is in place. The parallel path is the next milestone, so worker counts above one are recorded as skipped rather than faked." |
+
+## The three phases, by hand
+
+```bash
+# BEFORE - what the engine plans to do, without writing anything
+./build/uatc_cli stats pcomp/datasets/samples/numeric/uint32_table.bin
+
+# DURING - per-block progress on stderr, final result on stdout
+./build/uatc_cli compress data.bin data.uatc
+
+# AFTER - what the archive actually contains
+./build/uatc_cli info data.uatc
+```
+
+`stats` prints the size, the overall entropy, how many blocks are
+compressible, the predicted archive size and ratio, and a per-block table of
+each block's entropy, unique-byte count, the transform that will be selected
+for it and its predicted cost. The prediction comes from the fast cost
+estimator, so it is an **upper bound** — the real archive can come out
+smaller, and usually does.
+
+`compress` prints one line per block on **stderr**, so the result on stdout
+stays clean enough to pipe:
+
+```
+  block    1/6     262144 ->      76288 B  ByteShuffle  16.7%
+  block    2/6     262144 ->      76288 B  ByteShuffle  33.3%
+  block    3/6     262144 ->      24964 B  ByteShuffle  50.0%
+  block    4/6     262144 ->      52320 B  ByteShuffle  66.7%
+  block    5/6     262144 ->     262144 B  stored       83.3%
+  block    6/6      89280 ->      89280 B  stored      100.0%
+```
+
+That is `mixed.bin`: numeric data gets byte-shuffle, random data is stored
+unchanged. **The engine switches strategy part way through the same file.**
 
 ## Running the individual commands
 
@@ -38,11 +73,14 @@ If you prefer to drive it by hand instead of using the script:
 
 ```bash
 make all                       # build everything
-make test                      # run all 20 test suites
+make test                      # run all 21 test suites
 
 ./build/uatc_cli --help
 
-# Compress: the engine picks the transform per block
+# Before: what the engine plans to do
+./build/uatc_cli stats pcomp/datasets/samples/numeric/uint32_table.bin
+
+# Compress: the engine picks the transform per block (progress on stderr)
 ./build/uatc_cli compress pcomp/datasets/samples/numeric/uint32_table.bin demo.uatc
 
 # Inspect: sizes, ratio and the transform breakdown
