@@ -1,18 +1,36 @@
 #!/usr/bin/env bash
 # UATC dry run - end-to-end demonstration of the prototype.
 #
-#   ./scripts/demo.sh
+#   ./scripts/demo.sh            # run and keep the artefacts
+#   ./scripts/demo.sh --clean    # run and delete the artefacts afterwards
 #
 # Runs the whole pipeline on a scratch directory and prints a report:
 # build, tests, compress / info / verify / extract, byte-for-byte fidelity,
 # corruption detection, per-category adaptive transform selection, and the
-# benchmark. Nothing outside the scratch directory is touched.
+# benchmark.
+#
+# Where things are written:
+#   - Everything the demo produces (corpus, archives, restored files, logs,
+#     benchmark JSONL) goes into the scratch directory shown at the start.
+#   - Compiled binaries go to build/ and pcomp/build/ in the repository, and
+#     the pcomp benchmark corpus to pcomp/datasets/samples/. Both are ignored
+#     by git, so the repository stays clean.
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+CLEAN=0
+[ "${1:-}" = "--clean" ] && CLEAN=1
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/uatc-demo-XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT
+
+cleanup() {
+    if [ "$CLEAN" -eq 1 ]; then
+        rm -rf "$WORK"
+        printf '\nScratch directory removed: %s\n' "$WORK"
+    fi
+}
+trap cleanup EXIT
 
 BOLD=''; DIM=''; RESET=''
 if [ -t 1 ]; then
@@ -122,6 +140,12 @@ fi
 step "7. Benchmark (single-threaded path; parallel path is Day 6+)"
 note "the pcomp harness measures the raw block path (I/O and copy cost)."
 note "compression ratios are shown in step 4."
+
+# make_samples.py rewrites the tracked manifest, and the system headers it
+# picks up differ per machine. Keep the repository's copy as it was.
+MANIFEST="pcomp/datasets/manifest.json"
+[ -f "$MANIFEST" ] && cp "$MANIFEST" "$WORK/manifest.json.bak"
+
 if python3 pcomp/scripts/make_samples.py >/dev/null 2>&1; then
   ./pcomp/build/pc_bench --root pcomp/datasets/samples --out "$WORK/bench.jsonl" \
       --block-size 1048576 --reps 1 --workers 1,2,4,max 2>&1 | sed 's/^/   /'
@@ -131,6 +155,11 @@ else
   note "sample generation skipped"
 fi
 
+# Put the tracked manifest back the way we found it.
+if [ -f "$WORK/manifest.json.bak" ]; then
+  cp "$WORK/manifest.json.bak" "$MANIFEST"
+fi
+
 # -------------------------------------------------------------- summary
 step "Summary"
 if [ "$FAILED" -eq 0 ]; then
@@ -138,5 +167,14 @@ if [ "$FAILED" -eq 0 ]; then
 else
   printf '   %sOne or more demo steps failed.%s\n' "$BOLD" "$RESET"
 fi
-printf '   Artefacts kept in %s\n' "$WORK"
+printf '\n   Artefacts are in %s\n' "$WORK"
+printf '     corpus/      the five demo input files\n'
+printf '     restored/    the files extracted back from the archives\n'
+printf '     *.uatc       the archives that were created\n'
+printf '     bench.jsonl  the benchmark records\n'
+printf '     build.log    the build output\n'
+printf '     test.log     the test output\n'
+if [ "$CLEAN" -eq 0 ]; then
+  printf '\n   Delete it with: rm -rf %s\n' "$WORK"
+fi
 exit "$FAILED"
