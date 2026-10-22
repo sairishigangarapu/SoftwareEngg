@@ -224,16 +224,18 @@ int print_stats(const std::filesystem::path& input, std::size_t block_size) {
         << report.overallEntropy << " bits/byte\n"
         << "Compressible:      " << report.compressibleBlocks << " block(s)\n"
         << "Stored as-is:      " << report.storedBlocks << " block(s)\n"
-        << "Predicted archive: " << report.estimatedArchiveBytes << " bytes\n"
-        << "Predicted ratio:   " << std::fixed << std::setprecision(2)
+        << "Estimated payload: " << report.estimatedArchiveBytes << " bytes\n"
+        << "Estimated ratio:   " << std::fixed << std::setprecision(2)
         << report.estimatedRatio << '\n';
 
-    std::cout << "\nThe prediction comes from the fast cost estimator, so it is\n"
-                 "an upper bound: the real archive can come out smaller.\n";
+    std::cout
+        << "\nThe estimate is the fast cost heuristic used to rank the candidate\n"
+           "transforms against each other. It is not a size prediction: the real\n"
+           "archive can come out either smaller or larger than this.\n";
 
     std::cout << "\nPer block:\n"
               << "  #   offset      size   entropy  unique  transform"
-              << "        predicted\n";
+              << "        estimated\n";
 
     for (const auto& block : report.blocks) {
         std::cout

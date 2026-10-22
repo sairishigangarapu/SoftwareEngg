@@ -117,7 +117,6 @@ for f in "$WORK"/corpus/*/*; do
   printf '   BEFORE  what the engine plans to do:\n'
   "$PWD/build/uatc_cli" stats "$f" --block-size "$BLOCK_SIZE" 2>&1 \
     | sed -n '2,9p' | sed 's/^/     /'
-
   printf '   DURING  per-block progress:\n'
   "$PWD/build/uatc_cli" compress "$f" "$WORK/$name.uatc" \
       --block-size "$BLOCK_SIZE" 2>&1 >/dev/null \
