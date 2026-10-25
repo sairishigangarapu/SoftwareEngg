@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "archive/archive_binary.hpp"
@@ -16,7 +17,6 @@ namespace uatc {
 
 namespace {
 
-// FNV-1a 32-bit checksum of the original block bytes.
 std::uint32_t calculate_checksum(
     const std::vector<std::uint8_t>& data
 ) {
@@ -37,7 +37,7 @@ struct PreparedBlock {
     std::uint32_t checksum = 0;
 };
 
-} // namespace
+}  // namespace
 
 void ArchiveWriter::write(
     const std::filesystem::path& archive_path,
@@ -74,6 +74,38 @@ void ArchiveWriter::write(
     const std::vector<Block>& blocks,
     const std::vector<BlockEncoding>& encodings
 ) {
+    if (encodings.size() != blocks.size()) {
+        throw std::invalid_argument(
+            "Each block must have one encoding configuration."
+        );
+    }
+
+    std::vector<CodedBlock> coded(blocks.size(), CodedBlock{});
+
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+        coded[i].transform_id = encodings[i].transform_id;
+        coded[i].codec_id = encodings[i].codec_id;
+
+        coded[i].payload = Transform::encode(
+            blocks[i].data,
+            encodings[i].transform_id
+        );
+
+        coded[i].payload = Codec::encode(
+            coded[i].payload,
+            encodings[i].codec_id
+        );
+    }
+
+    write(archive_path, source_file, blocks, coded);
+}
+
+void ArchiveWriter::write(
+    const std::filesystem::path& archive_path,
+    const std::filesystem::path& source_file,
+    const std::vector<Block>& blocks,
+    const std::vector<CodedBlock>& coded
+) {
     if (!std::filesystem::exists(source_file)) {
         throw std::runtime_error(
             "Source file does not exist: " + source_file.string()
@@ -86,9 +118,9 @@ void ArchiveWriter::write(
         );
     }
 
-    if (encodings.size() != blocks.size()) {
+    if (coded.size() != blocks.size()) {
         throw std::invalid_argument(
-            "Each block must have one encoding configuration."
+            "Each block must have one encoded payload."
         );
     }
 
@@ -101,27 +133,28 @@ void ArchiveWriter::write(
     const std::string relative_path =
         source_file.filename().generic_string();
 
-    if (relative_path.empty() ||
-        relative_path.size() > UINT32_MAX) {
+    if (relative_path.empty() || relative_path.size() > UINT32_MAX) {
         throw std::invalid_argument(
             "Source filename is empty or too long."
         );
     }
 
-    // Pair every block with its encoding before sorting.
-    // This keeps transform and codec metadata attached to the
-    // correct block, even if workers finish out of order.
+    // Pair each original block with its encoded payload and metadata.
     std::vector<PreparedBlock> prepared;
     prepared.reserve(blocks.size());
 
     for (std::size_t i = 0; i < blocks.size(); ++i) {
         PreparedBlock item;
         item.block = blocks[i];
-        item.encoding = encodings[i];
+        item.encoding.transform_id = coded[i].transform_id;
+        item.encoding.codec_id = coded[i].codec_id;
+        item.payload = coded[i].payload;
+        item.checksum = calculate_checksum(blocks[i].data);
+
         prepared.push_back(std::move(item));
     }
 
-    // Deterministic archive order: ascending block ID.
+    // Deterministic order: ascending block ID.
     std::sort(
         prepared.begin(),
         prepared.end(),
@@ -130,22 +163,20 @@ void ArchiveWriter::write(
         }
     );
 
-    // The current version-1 reader expects block IDs 0, 1, 2, ...
+    // The version-1 reader expects sequential block IDs starting at zero.
+    std::uint64_t total_original_size = 0;
+
     for (std::size_t i = 0; i < prepared.size(); ++i) {
         if (prepared[i].block.block_id != i) {
             throw std::invalid_argument(
                 "Block IDs must be unique and sequential from zero."
             );
         }
-    }
 
-    const std::uint64_t original_size =
-        std::filesystem::file_size(source_file);
+        const std::uint64_t block_size =
+            static_cast<std::uint64_t>(prepared[i].block.data.size());
 
-    std::uint64_t total_original_size = 0;
-
-    for (auto& item : prepared) {
-        if (item.block.data.size() >
+        if (block_size >
             std::numeric_limits<std::uint64_t>::max() -
                 total_original_size) {
             throw std::invalid_argument(
@@ -153,21 +184,11 @@ void ArchiveWriter::write(
             );
         }
 
-        total_original_size +=
-            static_cast<std::uint64_t>(item.block.data.size());
-
-        item.checksum = calculate_checksum(item.block.data);
-
-        const auto transformed = Transform::encode(
-            item.block.data,
-            item.encoding.transform_id
-        );
-
-        item.payload = Codec::encode(
-            transformed,
-            item.encoding.codec_id
-        );
+        total_original_size += block_size;
     }
+
+    const std::uint64_t original_size =
+        std::filesystem::file_size(source_file);
 
     if (total_original_size != original_size) {
         throw std::invalid_argument(
@@ -224,7 +245,7 @@ void ArchiveWriter::write(
 
     writer.write_string(relative_path);
 
-    // Block index in deterministic block-ID order.
+    // Block index. Payload offsets follow the same deterministic order.
     std::uint64_t current_payload_offset = header.payload_offset;
 
     for (const auto& item : prepared) {
@@ -247,7 +268,10 @@ void ArchiveWriter::write(
         writer.write_u16(0);
         writer.write_u32(item.checksum);
 
-        if (item.payload.size() >
+        const std::uint64_t payload_size =
+            static_cast<std::uint64_t>(item.payload.size());
+
+        if (payload_size >
             std::numeric_limits<std::uint64_t>::max() -
                 current_payload_offset) {
             throw std::invalid_argument(
@@ -255,14 +279,13 @@ void ArchiveWriter::write(
             );
         }
 
-        current_payload_offset +=
-            static_cast<std::uint64_t>(item.payload.size());
+        current_payload_offset += payload_size;
     }
 
-    // Payloads are written in the same deterministic order as the index.
+    // Payloads must be written in the same order as their index records.
     for (const auto& item : prepared) {
         writer.write_bytes(item.payload);
     }
 }
 
-} // namespace uatc
+}  // namespace uatc

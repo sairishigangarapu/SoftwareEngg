@@ -238,11 +238,14 @@ int main() {
         // TEST 2: Extraction using every implemented transform.
         const uatc::TransformId transforms[] = {
             uatc::TransformId::None,
-            uatc::TransformId::RLE,
-            uatc::TransformId::Delta
+            uatc::TransformId::Delta,
+            uatc::TransformId::Xor,
+            uatc::TransformId::ByteShuffle,
+            uatc::TransformId::RLE
         };
 
-        const char* transform_names[] = {"None", "RLE", "Delta"};
+        const char* transform_names[] = {
+            "None", "Delta", "Xor", "ByteShuffle", "RLE"};
 
         for (std::size_t i = 0;
              i < sizeof(transforms) / sizeof(transforms[0]); ++i) {

@@ -10,6 +10,7 @@
 #include "archive/archive_binary.hpp"
 #include "archive/codec.hpp"
 #include "archive/transforms.hpp"
+#include "core/transform_factory.hpp"
 
 namespace uatc {
 
@@ -114,9 +115,17 @@ void ArchiveReader::validate_block(
         throw std::runtime_error("Invalid block ID.");
     }
 
-    if (transform_id != TransformId::None &&
-        transform_id != TransformId::RLE &&
-        transform_id != TransformId::Delta) {
+    // Accept every transform the compression core registers, so the archive
+    // layer stays in step with the candidate set without being rewritten
+    // each time a transform is added.
+    bool known_transform = false;
+    for (TransformId candidate : core::candidate_transform_ids()) {
+        if (transform_id == candidate) {
+            known_transform = true;
+            break;
+        }
+    }
+    if (!known_transform) {
         throw std::runtime_error("Unsupported transform.");
     }
 
@@ -125,7 +134,7 @@ void ArchiveReader::validate_block(
         throw std::runtime_error("Unsupported codec.");
     }
 
-    // None, RLE, and Delta currently define no parameters.
+    // Every v1 transform defines no parameters.
     if (transform_parameter != 0) {
         throw std::runtime_error(
             "Unsupported transform parameter."
@@ -141,7 +150,7 @@ void ArchiveReader::validate_block(
     }
 }
 
-std::vector<std::uint8_t> ArchiveReader::read(
+ArchivedFile ArchiveReader::read_file(
     const std::filesystem::path& archive_path
 ) {
     if (!std::filesystem::exists(archive_path)) {
@@ -396,7 +405,13 @@ std::vector<std::uint8_t> ArchiveReader::read(
         );
     }
 
-    return result;
+    return ArchivedFile{path, std::move(result)};
 }
 
-} // namespace uatc
+std::vector<std::uint8_t> ArchiveReader::read(
+    const std::filesystem::path& archive_path
+) {
+    return read_file(archive_path).data;
+}
+
+}  // namespace uatc

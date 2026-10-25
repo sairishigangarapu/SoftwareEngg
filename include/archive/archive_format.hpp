@@ -15,8 +15,11 @@ constexpr std::uint32_t UATC_BLOCK_RECORD_SIZE = 40;
 
 enum class TransformId : std::uint8_t {
     None = 0,
-    RLE = 1,
-    Delta = 2
+    Delta = 1,
+    Xor = 2,
+    ByteShuffle = 3,
+    RLE = 4,
+    Reserved = 5  // stretch-goal (bit-plane) transform
 };
 
 enum class CodecId : std::uint8_t {

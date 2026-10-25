@@ -31,7 +31,8 @@ int main() {
                       static_cast<std::streamsize>(original.size()));
         }
 
-        for (auto transform : {TransformId::None, TransformId::RLE, TransformId::Delta}) {
+        for (auto transform : {TransformId::None, TransformId::Delta, TransformId::Xor,
+                               TransformId::ByteShuffle, TransformId::RLE}) {
             const auto transformed = Transform::encode(original, transform);
             require(Transform::decode(transformed, transform) == original,
                     "Transform round-trip failed.");
@@ -44,7 +45,8 @@ int main() {
         }
 
         const auto blocks = BlockSplitter::split(original, 7);
-        for (auto transform : {TransformId::None, TransformId::RLE, TransformId::Delta}) {
+        for (auto transform : {TransformId::None, TransformId::Delta, TransformId::Xor,
+                               TransformId::ByteShuffle, TransformId::RLE}) {
             for (auto codec : {CodecId::None, CodecId::Baseline}) {
                 ArchiveWriter::write(archive, input, blocks, transform, codec);
                 require(ArchiveReader::read(archive) == original,
