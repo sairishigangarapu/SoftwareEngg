@@ -9,7 +9,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
 
-# Core library
 add_library(uatc_core
     src/archive/archive_binary.cpp
     src/archive/archive_reader.cpp
@@ -26,14 +25,12 @@ target_include_directories(uatc_core
         ${PROJECT_SOURCE_DIR}/include
 )
 
-# Command-line application
 add_executable(uatc_cli
     src/main.cpp
 )
 
 target_link_libraries(uatc_cli PRIVATE uatc_core)
 
-# Tests
 if(BUILD_TESTING)
     add_executable(filesystem_test tests/filesystem_test.cpp)
     target_link_libraries(filesystem_test PRIVATE uatc_core)
@@ -63,6 +60,10 @@ if(BUILD_TESTING)
     target_link_libraries(mixed_transform_test PRIVATE uatc_core)
     add_test(NAME mixed_transform_tests COMMAND mixed_transform_test)
 
+    add_executable(path_traversal_test tests/path_traversal_test.cpp)
+    target_link_libraries(path_traversal_test PRIVATE uatc_core)
+    add_test(NAME path_traversal_tests COMMAND path_traversal_test)
+
     set_tests_properties(
         filesystem_tests
         archive_binary_tests
@@ -71,6 +72,7 @@ if(BUILD_TESTING)
         archive_reader_tests
         transform_codec_tests
         mixed_transform_tests
+        path_traversal_tests
         PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     )
 endif()

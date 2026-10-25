@@ -12,6 +12,7 @@
 #include "archive/block.hpp"
 #include "filesystem/file_enumerator.hpp"
 #include "filesystem/file_reader.hpp"
+#include "filesystem/safe_path.hpp"
 
 namespace fs = std::filesystem;
 
@@ -96,11 +97,12 @@ void compress_path(
     }
 
     if (!fs::is_directory(input_path)) {
-        throw std::runtime_error("Input must be a file or directory.");
+        throw std::runtime_error(
+            "Input must be a file or directory."
+        );
     }
 
     const auto files = uatc::FileEnumerator::enumerate(input_path);
-
     fs::create_directories(output_path);
 
     std::size_t count = 0;
@@ -108,8 +110,11 @@ void compress_path(
     for (const auto& file : files) {
         const fs::path source = input_path / file.relative_path;
 
-        fs::path archive = output_path / file.relative_path;
-        archive += ".uatc";
+        fs::path archive_relative = file.relative_path;
+        archive_relative += ".uatc";
+
+        const fs::path archive =
+            uatc::safe_destination(output_path, archive_relative);
 
         compress_file(source, archive);
         ++count;
@@ -130,6 +135,7 @@ void extract_path(
     }
 
     if (fs::is_regular_file(input_path)) {
+        // The user explicitly supplies the destination for single-file extraction.
         extract_file(input_path, output_path);
         return;
     }
@@ -155,7 +161,8 @@ void extract_path(
         fs::path restored_relative = file.relative_path;
         restored_relative.replace_extension();
 
-        const fs::path destination = output_path / restored_relative;
+        const fs::path destination =
+            uatc::safe_destination(output_path, restored_relative);
 
         extract_file(archive, destination);
         ++count;
