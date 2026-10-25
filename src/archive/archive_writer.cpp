@@ -1,7 +1,9 @@
 
 #include "archive/archive_writer.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -27,6 +29,13 @@ std::uint32_t calculate_checksum(
 
     return hash;
 }
+
+struct PreparedBlock {
+    Block block;
+    BlockEncoding encoding;
+    std::vector<std::uint8_t> payload;
+    std::uint32_t checksum = 0;
+};
 
 } // namespace
 
@@ -67,15 +76,13 @@ void ArchiveWriter::write(
 ) {
     if (!std::filesystem::exists(source_file)) {
         throw std::runtime_error(
-            "Source file does not exist: " +
-            source_file.string()
+            "Source file does not exist: " + source_file.string()
         );
     }
 
     if (!std::filesystem::is_regular_file(source_file)) {
         throw std::runtime_error(
-            "Source path is not a regular file: " +
-            source_file.string()
+            "Source path is not a regular file: " + source_file.string()
         );
     }
 
@@ -85,10 +92,7 @@ void ArchiveWriter::write(
         );
     }
 
-    if (blocks.size() >
-        static_cast<std::size_t>(
-            UINT32_MAX
-        )) {
+    if (blocks.size() > static_cast<std::size_t>(UINT32_MAX)) {
         throw std::invalid_argument(
             "Too many blocks for the archive format."
         );
@@ -97,32 +101,77 @@ void ArchiveWriter::write(
     const std::string relative_path =
         source_file.filename().generic_string();
 
+    if (relative_path.empty() ||
+        relative_path.size() > UINT32_MAX) {
+        throw std::invalid_argument(
+            "Source filename is empty or too long."
+        );
+    }
+
+    // Pair every block with its encoding before sorting.
+    // This keeps transform and codec metadata attached to the
+    // correct block, even if workers finish out of order.
+    std::vector<PreparedBlock> prepared;
+    prepared.reserve(blocks.size());
+
+    for (std::size_t i = 0; i < blocks.size(); ++i) {
+        PreparedBlock item;
+        item.block = blocks[i];
+        item.encoding = encodings[i];
+        prepared.push_back(std::move(item));
+    }
+
+    // Deterministic archive order: ascending block ID.
+    std::sort(
+        prepared.begin(),
+        prepared.end(),
+        [](const PreparedBlock& a, const PreparedBlock& b) {
+            return a.block.block_id < b.block.block_id;
+        }
+    );
+
+    // The current version-1 reader expects block IDs 0, 1, 2, ...
+    for (std::size_t i = 0; i < prepared.size(); ++i) {
+        if (prepared[i].block.block_id != i) {
+            throw std::invalid_argument(
+                "Block IDs must be unique and sequential from zero."
+            );
+        }
+    }
+
     const std::uint64_t original_size =
         std::filesystem::file_size(source_file);
 
-    std::vector<std::vector<std::uint8_t>> payloads;
-    payloads.reserve(blocks.size());
+    std::uint64_t total_original_size = 0;
 
-    std::vector<std::uint32_t> checksums;
-    checksums.reserve(blocks.size());
+    for (auto& item : prepared) {
+        if (item.block.data.size() >
+            std::numeric_limits<std::uint64_t>::max() -
+                total_original_size) {
+            throw std::invalid_argument(
+                "Total block size exceeds archive format limits."
+            );
+        }
 
-    for (std::size_t i = 0; i < blocks.size(); ++i) {
-        const auto& original_block = blocks[i];
+        total_original_size +=
+            static_cast<std::uint64_t>(item.block.data.size());
 
-        checksums.push_back(
-            calculate_checksum(original_block.data)
-        );
+        item.checksum = calculate_checksum(item.block.data);
 
         const auto transformed = Transform::encode(
-            original_block.data,
-            encodings[i].transform_id
+            item.block.data,
+            item.encoding.transform_id
         );
 
-        payloads.push_back(
-            Codec::encode(
-                transformed,
-                encodings[i].codec_id
-            )
+        item.payload = Codec::encode(
+            transformed,
+            item.encoding.codec_id
+        );
+    }
+
+    if (total_original_size != original_size) {
+        throw std::invalid_argument(
+            "Total block size does not match source file size."
         );
     }
 
@@ -132,7 +181,7 @@ void ArchiveWriter::write(
     header.header_size = UATC_ARCHIVE_HEADER_SIZE;
     header.file_count = 1;
     header.block_count =
-        static_cast<std::uint32_t>(blocks.size());
+        static_cast<std::uint32_t>(prepared.size());
 
     header.file_table_offset = UATC_ARCHIVE_HEADER_SIZE;
 
@@ -140,12 +189,12 @@ void ArchiveWriter::write(
         header.file_table_offset + UATC_FILE_RECORD_SIZE;
 
     header.block_index_offset =
-        path_offset + relative_path.size();
+        path_offset + static_cast<std::uint64_t>(relative_path.size());
 
     header.payload_offset =
         header.block_index_offset +
         UATC_BLOCK_RECORD_SIZE *
-        static_cast<std::uint64_t>(blocks.size());
+            static_cast<std::uint64_t>(prepared.size());
 
     BinaryWriter writer(archive_path);
 
@@ -167,50 +216,52 @@ void ArchiveWriter::write(
     );
     writer.write_u64(original_size);
     writer.write_u32(
-        blocks.empty() ? 0 : blocks.front().block_id
+        prepared.empty() ? 0 : prepared.front().block.block_id
     );
     writer.write_u32(
-        static_cast<std::uint32_t>(blocks.size())
+        static_cast<std::uint32_t>(prepared.size())
     );
 
     writer.write_string(relative_path);
 
-    // Block index.
+    // Block index in deterministic block-ID order.
     std::uint64_t current_payload_offset = header.payload_offset;
 
-    for (std::size_t i = 0; i < blocks.size(); ++i) {
-        const auto& block = blocks[i];
-        const auto& payload = payloads[i];
-        const auto& encoding = encodings[i];
-
+    for (const auto& item : prepared) {
         writer.write_u32(0);
-        writer.write_u32(block.block_id);
+        writer.write_u32(item.block.block_id);
         writer.write_u64(current_payload_offset);
         writer.write_u64(
-            static_cast<std::uint64_t>(block.data.size())
+            static_cast<std::uint64_t>(item.block.data.size())
         );
         writer.write_u64(
-            static_cast<std::uint64_t>(payload.size())
+            static_cast<std::uint64_t>(item.payload.size())
         );
 
         writer.write_u8(
-            static_cast<std::uint8_t>(encoding.transform_id)
+            static_cast<std::uint8_t>(item.encoding.transform_id)
         );
         writer.write_u8(
-            static_cast<std::uint8_t>(encoding.codec_id)
+            static_cast<std::uint8_t>(item.encoding.codec_id)
         );
         writer.write_u16(0);
+        writer.write_u32(item.checksum);
 
-        // Store the checksum of the original, unencoded block.
-        writer.write_u32(checksums[i]);
+        if (item.payload.size() >
+            std::numeric_limits<std::uint64_t>::max() -
+                current_payload_offset) {
+            throw std::invalid_argument(
+                "Archive payload offset exceeds format limits."
+            );
+        }
 
         current_payload_offset +=
-            static_cast<std::uint64_t>(payload.size());
+            static_cast<std::uint64_t>(item.payload.size());
     }
 
-    // Write encoded block payloads.
-    for (const auto& payload : payloads) {
-        writer.write_bytes(payload);
+    // Payloads are written in the same deterministic order as the index.
+    for (const auto& item : prepared) {
+        writer.write_bytes(item.payload);
     }
 }
 
