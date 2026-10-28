@@ -9,23 +9,17 @@
 #include "archive/archive_binary.hpp"
 #include "archive/codec.hpp"
 #include "archive/transforms.hpp"
+#include "core/crc32.hpp"
 
 namespace uatc {
 
 namespace {
 
-// FNV-1a 32-bit checksum of the original block bytes.
+// CRC-32 of the original block bytes, the checksum the SAD specifies.
 std::uint32_t calculate_checksum(
     const std::vector<std::uint8_t>& data
 ) {
-    std::uint32_t hash = 2166136261u;
-
-    for (const std::uint8_t byte : data) {
-        hash ^= byte;
-        hash *= 16777619u;
-    }
-
-    return hash;
+    return core::crc32(data.data(), data.size());
 }
 
 } // namespace
