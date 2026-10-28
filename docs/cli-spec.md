@@ -26,7 +26,9 @@ uatc compress <input> <output.uatc> [--workers N] [--block-size BYTES]
 uatc extract <archive.uatc> <output-dir>
   Restores files and folders under output-dir, byte for byte.
   Each block is checked (CRC32) before it is written. On a failure it
-  stops, reports the error and removes partial output.
+  stops, reports the error and removes partial output. The recorded path
+  must stay inside the destination: absolute paths and '..' segments are
+  rejected with E_PATH_TRAVERSAL and nothing is written outside.
 
 uatc info <archive.uatc>
   Prints the fields in docs/inspection-data.md section 1.
@@ -36,9 +38,13 @@ uatc verify <archive.uatc>
   Checks magic, version, structure and every checksum. Writes nothing to disk.
   Prints a success line, or exactly what failed (error code and block index).
 
-uatc benchmark <sample-dir>
-  Runs UATC, gzip/DEFLATE and Zstandard on the same samples and prints
-  ratio, speed and resource use. Owner: Sampada.
+uatc benchmark <sample-dir> [--gzip] [--workers N] [--block-size N] [--out FILE]
+  Runs the compressor over every file in the directory: original bytes,
+  archive bytes, ratio, compress and extract times and MB/s per file, plus
+  the gzip -6 ratio on the same file when --gzip is given. Every record
+  includes a round-trip check, so a benchmark can only pass if the extract
+  reproduces the file. Records are written as JSONL (bench_results.jsonl
+  by default) for plotting or diffing between runs.
 
 uatc --help, uatc <command> --help
 
@@ -112,3 +118,15 @@ Per block:
   block    2/4     262144 ->      76288 B  ByteShuffle  50.0%
   block    3/4     262144 ->      24964 B  ByteShuffle  75.0%
   block    4/4     262144 ->     262144 B  stored      100.0%
+
+## Example `benchmark` output (with --gzip)
+
+UATC benchmark
+  files:        3
+  block size:   65536 bytes
+  workers:      4
+  noise.bin            80000 ->    80237 B  ratio   1.00  gzip   1.00  ok
+  table.bin           200000 ->    58533 B  ratio   3.42  gzip   2.86  ok
+
+The table itself never claims to beat gzip (NFR-02): ratios are reported
+side by side, and every row's ok means the extract reproduced the file.

@@ -30,7 +30,7 @@ nothing in the repository is touched.
 | 4. Before, during and after | **The core idea**: the engine's plan for the file, its per-block progress while it runs, and the archive it actually produced | "First it tells us what it intends to do — this is the prediction. Then it works block by block, and you can see it pick a different transform for each block. Then here is the result. In the mixed file it uses byte-shuffle for the numeric part and leaves the random part alone." |
 | 5. Round trip | Every file restored **byte for byte**, SHA-256 shown | "Correctness is a hard requirement. Every extracted file matches the original exactly." |
 | 6. Integrity | Flip one byte in a valid archive, verification catches it and reports the error code | "Corruption is always detected and reported, never silently turned into wrong output. The exit code maps to the error table in the SAD." |
-| 7. Benchmark | Throughput on the raw path | "The benchmark harness is in place. The parallel path is the next milestone, so worker counts above one are recorded as skipped rather than faked." |
+| 7. Benchmark | `uatc benchmark` on the corpus, with the gzip comparison | "Every record carries a round-trip check, so a benchmark can only pass if the extract reproduces the file. Ratios are reported side by side with gzip - not claimed to beat it. Worker counts above one now run for real through the thread pool and produce byte-identical archives, which the parallel determinism test asserts." |
 
 ## The three phases, by hand
 
@@ -125,14 +125,13 @@ implemented yet, so the frontend is still talking to mock data.
 
 Be straight about the gaps - the guide will check them anyway:
 
-- **Parallel execution (FR-10) is not done.** The thread pool is declared but
-  not implemented, so the benchmark records worker counts above one as
-  `skipped_parallel_not_implemented`. Issue #40.
+- **Parallel execution (FR-10)** is now implemented and verified:
+  byte-identical archives at 1, 2 and 8 workers (issue #40, UATC-028 closed).
 - **The entropy coder is still the baseline PackBits-style coder.** The
   interface is in place, so swapping in Huffman or rANS does not touch the
   compressor. This is why text compresses only slightly.
-- **Checksums are FNV-1a, not the CRC32 and SHA-256 the SAD specifies.**
-  Issue #41.
+- **Checksums now match the SAD**: CRC32 per block, SHA-256 per file and
+  per archive with the integrity footer (issues #41/#47, UATC-029 closed).
 - **Multi-file and directory archives are not supported yet.** The reader
   currently handles one file per archive.
 - **The HTTP API and job manager are not implemented.** The frontend runs on
