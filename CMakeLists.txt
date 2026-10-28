@@ -39,6 +39,7 @@ add_library(uatc_core
     src/core/crc32.cpp
     src/core/sha256.cpp
     src/core/thread_pool.cpp
+    src/core/path_safety.cpp
     src/archive/archive_inspector.cpp
     src/archive/archive_verifier.cpp
 )
@@ -257,6 +258,12 @@ if(BUILD_TESTING)
     target_link_libraries(core_parallel_test PRIVATE uatc_core)
     add_test(NAME core_parallel_tests COMMAND core_parallel_test)
 
+    add_executable(core_path_safety_test
+        tests/core/path_safety_test.cpp
+    )
+    target_link_libraries(core_path_safety_test PRIVATE uatc_core)
+    add_test(NAME core_path_safety_tests COMMAND core_path_safety_test)
+
     # All tests run from the project root so test_data paths work.
     set_tests_properties(
         filesystem_tests
@@ -284,6 +291,7 @@ if(BUILD_TESTING)
         core_integrity_tests
         core_thread_pool_tests
         core_parallel_tests
+        core_path_safety_tests
         integration_roundtrip_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

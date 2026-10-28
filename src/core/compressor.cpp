@@ -11,6 +11,7 @@
 #include "archive/transforms.hpp"
 #include "core/compressibility_probe.hpp"
 #include "core/error.hpp"
+#include "core/path_safety.hpp"
 #include "core/planner.hpp"
 #include "core/transform_factory.hpp"
 #include "core/transform_selector.hpp"
@@ -157,15 +158,8 @@ ExtractResult CompressionManager::extract(
 
     const auto file = ArchiveReader::read_file(archive);
 
-    // The recorded path must stay inside the destination directory: reject
-    // absolute paths and any '..' segment (E_PATH_TRAVERSAL).
-    const std::filesystem::path relative(file.relative_path);
-    if (relative.is_absolute() ||
-        relative.string().find("..") != std::string::npos) {
-        throw UatcError(ErrorCode::PathTraversal,
-                        "The archive contains an unsafe file path: " +
-                            file.relative_path);
-    }
+    // One shared rule for everything we are about to place on disk.
+    const std::filesystem::path relative = safe_relative_path(file.relative_path);
 
     std::filesystem::create_directories(outputDirectory);
     const auto destination = outputDirectory / relative;
