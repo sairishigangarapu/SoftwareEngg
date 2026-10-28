@@ -14,6 +14,8 @@
 #include "core/transform_selector.hpp"
 #include "filesystem/file_reader.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -21,10 +23,14 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
+
+// Reads a whole file, for the round-trip comparison in the benchmark.
+std::vector<std::uint8_t> read_file_bytes(const std::filesystem::path& path);
 
 void print_help() {
     std::cout
@@ -32,11 +38,14 @@ void print_help() {
         << "Usage:\n"
         << "  uatc --help\n"
         << "  uatc stats <input> [--block-size BYTES]\n"
-        << "  uatc compress <input> <output.uatc> [--block-size BYTES] [--quiet]\n"
+        << "  uatc compress <input> <output.uatc> [--block-size BYTES] [--workers N] [--quiet]\n"
         << "  uatc extract <archive.uatc> <output-dir> [--quiet]\n"
         << "  uatc info <archive.uatc>\n"
-        << "  uatc verify <archive.uatc>\n\n"
+        << "  uatc verify <archive.uatc>\n"
+        << "  uatc benchmark <dir> [--block-size BYTES] [--workers N]\n"
+        << "                   [--gzip] [--out FILE]\n\n"
         << "Commands:\n"
+        << "  benchmark Runs the compressor over every file in a directory.\n"
         << "  stats    Analyse a file and report what the engine will do to it.\n"
         << "  compress  Compress a file into a .uatc archive.\n"
         << "  extract   Restore the contents of a .uatc archive.\n"
@@ -253,6 +262,136 @@ int print_stats(const std::filesystem::path& input, std::size_t block_size) {
 
     return 0;
 }
+// Runs the benchmark over a directory of sample files (NFR-02, NFR-07):
+// ratio, time and throughput per file, with a gzip comparison on the same
+// file when the gzip tool is available. Records are written as JSONL so
+// they can be plotted or diffed between runs.
+int benchmark_dir(const std::filesystem::path& dir,
+                  std::size_t block_size,
+                  std::size_t workers,
+                  bool with_gzip,
+                  const std::filesystem::path& out_file) {
+    if (!std::filesystem::exists(dir)) {
+        std::cerr << "error: E_NOT_FOUND: directory does not exist: "
+                  << dir.string() << '\n';
+        return 3;
+    }
+    if (!std::filesystem::is_directory(dir)) {
+        std::cerr << "error: E_INVALID_ARGUMENT: not a directory: "
+                  << dir.string() << '\n';
+        return 2;
+    }
+
+    std::vector<std::filesystem::path> files;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+        if (entry.is_regular_file()) files.push_back(entry.path());
+    }
+    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) {
+        return a.generic_string() < b.generic_string();
+    });
+
+    const auto scratch = out_file.parent_path() / "uatc_bench_tmp";
+    std::filesystem::create_directories(scratch);
+
+    std::ofstream jsonl(out_file, std::ios::binary);
+    if (!jsonl) {
+        std::cerr << "error: E_IO: cannot write: " << out_file.string() << '\n';
+        return 5;
+    }
+
+    std::cout << "UATC benchmark\n"
+              << "  files:        " << files.size() << '\n'
+              << "  block size:   " << block_size << " bytes\n"
+              << "  workers:      " << workers << '\n';
+
+    int rc = 0;
+    for (const auto& file : files) {
+        const auto name = file.filename().string();
+        const auto archive = scratch / (name + ".uatc");
+        const auto restored_dir = scratch / ("r_" + name);
+
+        auto started = std::chrono::steady_clock::now();
+        uatc::core::CompressOptions options;
+        options.block_size = block_size;
+        options.workers = workers;
+        uatc::core::CompressionManager::compress(file, archive, options);
+        auto elapsed_compress =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started).count();
+
+        started = std::chrono::steady_clock::now();
+        const auto restored =
+            uatc::core::CompressionManager::extract(archive, restored_dir);
+        auto elapsed_extract =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - started).count();
+
+        // The extract must reproduce the file, or the benchmark record is
+        // not honest about correctness.
+        const bool identical =
+            read_file_bytes(restored.destination) == read_file_bytes(file);
+
+        const auto original = std::filesystem::file_size(file);
+        const auto archived = std::filesystem::file_size(archive);
+        const double ratio = archived ? static_cast<double>(original) /
+                                        static_cast<double>(archived) : 0.0;
+        const double mbps_c =
+            elapsed_compress > 0
+                ? (original / 1e6) / (elapsed_compress / 1e3) : 0.0;
+        const double mbps_d =
+            elapsed_extract > 0
+                ? (original / 1e6) / (elapsed_extract / 1e3) : 0.0;
+
+        std::string gzip_ratio_field = "null";
+        if (with_gzip) {
+            const auto gz = scratch / (name + ".gz");
+            const std::string cmd =
+                "gzip -c -6 '" + file.string() + "' > '" + gz.string() + "'";
+            if (std::system(cmd.c_str()) == 0) {
+                const auto gzipped = std::filesystem::file_size(gz);
+                std::ostringstream o;
+                o << std::fixed << std::setprecision(2)
+                  << static_cast<double>(original) /
+                     static_cast<double>(gzipped);
+                gzip_ratio_field = o.str();
+            }
+            std::filesystem::remove(gz);
+        }
+
+        std::cout << "  " << std::left << std::setw(24) << name
+                  << std::right
+                  << std::setw(12) << original << " -> "
+                  << std::setw(12) << archived << " B  ratio "
+                  << std::fixed << std::setprecision(2) << std::setw(6)
+                  << ratio << "  gzip "
+                  << std::setw(6) << gzip_ratio_field << "  "
+                  << std::setprecision(1) << std::setw(8) << mbps_c
+                  << " MB/s comp  "
+                  << std::setw(8) << mbps_d << " MB/s decomp  "
+                  << (identical ? "ok" : "ROUND-TRIP FAILED") << '\n';
+
+        if (!identical) rc = 1;
+
+        jsonl << "{\"file\":\"" << name << "\",\"original\":" << original
+              << ",\"archive\":" << archived
+              << ",\"ratio\":" << ratio
+              << ",\"gzip_ratio\":" << gzip_ratio_field
+              << ",\"compress_ms\":" << elapsed_compress
+              << ",\"extract_ms\":" << elapsed_extract
+              << ",\"mbps_compress\":" << mbps_c
+              << ",\"mbps_extract\":" << mbps_d
+              << ",\"roundtrip\":\"" << (identical ? "ok" : "failed")
+              << "\"}\n";
+
+        std::filesystem::remove_all(restored_dir);
+        std::filesystem::remove(archive);
+    }
+
+    jsonl.close();
+    std::filesystem::remove_all(scratch);
+    return rc;
+}
+
 int compress_file(const std::filesystem::path& input,
                   const std::filesystem::path& output,
                   std::size_t block_size,
@@ -315,6 +454,14 @@ int extract_archive(const std::filesystem::path& archive,
     }
 
     return 0;
+}
+
+// Reads a whole file, for the round-trip comparison in the benchmark.
+std::vector<std::uint8_t> read_file_bytes(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::vector<std::uint8_t>(
+        (std::istreambuf_iterator<char>(in)),
+        std::istreambuf_iterator<char>());
 }
 
 }  // namespace
@@ -446,6 +593,53 @@ int main(int argc, char* argv[]) {
             }
 
             return extract_archive(archive, output_dir, quiet);
+        }
+
+        if (command == "benchmark") {
+            if (argc < 3) {
+                print_help();
+                std::cerr << "\nerror: E_INVALID_ARGUMENT: "
+                          << "benchmark needs a sample directory.\n";
+                return 2;
+            }
+
+            const std::filesystem::path dir = argv[2];
+            std::size_t block_size = uatc::core::kDefaultBlockSize;
+            std::size_t workers = 1;
+            bool with_gzip = false;
+            std::filesystem::path out_file = "bench_results.jsonl";
+
+            for (int i = 3; i < argc; ++i) {
+                const std::string option = argv[i];
+                if (option == "--gzip") {
+                    with_gzip = true;
+                } else if (option == "--block-size" && i + 1 < argc) {
+                    try {
+                        block_size = parse_size(argv[++i], "--block-size");
+                    } catch (const std::exception& error) {
+                        std::cerr << "error: E_INVALID_ARGUMENT: "
+                                  << error.what() << '\n';
+                        return 2;
+                    }
+                } else if (option == "--workers" && i + 1 < argc) {
+                    try {
+                        workers = parse_size(argv[++i], "--workers");
+                    } catch (const std::exception& error) {
+                        std::cerr << "error: E_INVALID_ARGUMENT: "
+                                  << error.what() << '\n';
+                        return 2;
+                    }
+                } else if (option == "--out" && i + 1 < argc) {
+                    out_file = argv[++i];
+                } else {
+                    print_help();
+                    std::cerr << "\nerror: E_INVALID_ARGUMENT: unknown option: "
+                              << option << '\n';
+                    return 2;
+                }
+            }
+
+            return benchmark_dir(dir, block_size, workers, with_gzip, out_file);
         }
 
         if (command != "info" && command != "verify") {

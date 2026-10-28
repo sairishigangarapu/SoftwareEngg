@@ -38,9 +38,18 @@ BlockPlan plan_block(
 
     const auto selection = selector.select(data);
     plan.transformId = selection.transform_id;
-    plan.codecId = CodecId::Baseline;
     plan.estimatedCost = selection.estimated_cost;
     plan.stored = selection.stored_raw;
+
+    // A stored block has no codec: its payload is the original bytes.
+    // Tagging it with a codec would make the reader try to decode a
+    // payload that was never encoded.
+    if (plan.stored) {
+        plan.transformId = TransformId::None;
+        plan.codecId = CodecId::None;
+    } else {
+        plan.codecId = CodecId::Baseline;
+    }
     return plan;
 }
 

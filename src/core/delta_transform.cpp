@@ -6,12 +6,30 @@ namespace uatc::core {
 
 std::size_t DeltaTransform::estimateCost(ByteSpan in) const {
     if (in.empty()) return 0;
-    // Count the bytes that survive as non-zero deltas: those are the ones the
-    // entropy coder still has to spend bytes on.
-    std::size_t cost = (in[0] == 0) ? 0 : 1;
-    for (std::size_t i = 1; i < in.size; ++i) {
-        const std::uint8_t d = static_cast<std::uint8_t>(in[i] - in[i - 1]);
-        cost += (d == 0) ? 0 : 1;
+    // Price the transformed bytes the way the coder would price them, by
+    // walking the delta stream and grouping equal deltas into runs without
+    // materialising it.
+    std::size_t cost = 0;
+    std::size_t i = 0;
+    while (i < in.size) {
+        const std::uint8_t d = (i == 0)
+            ? in[0]
+            : static_cast<std::uint8_t>(in[i] - in[i - 1]);
+        std::size_t run = 1;
+        while (i + run < in.size) {
+            const std::uint8_t next =
+                static_cast<std::uint8_t>(in[i + run] - in[i + run - 1]);
+            if (next != d || run >= 128) break;
+            ++run;
+        }
+        // Runs of three or more equal delta bytes price as a 2-byte repeat;
+        // anything else is a literal run of one control byte plus its bytes.
+        if (run >= 3) {
+            cost += 2;
+        } else {
+            cost += run + 1;
+        }
+        i += run;
     }
     return cost + kTransformMetadataOverhead;
 }

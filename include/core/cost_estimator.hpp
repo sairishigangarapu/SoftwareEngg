@@ -12,9 +12,11 @@
 
 namespace uatc::core {
 
-// Estimated coded size (bytes) of a transformed block.
-// Runs of 3+ identical bytes cost 2 bytes under the baseline coder
-// (control byte + value byte); every other byte costs 1 byte.
+// Estimated coded size (bytes) of a transformed block under the baseline
+// coder. The pricing mirrors what the coder emits: a literal run of up to
+// 128 bytes costs one control byte plus its bytes, and a repeat run of
+// three or more identical bytes costs two bytes. It is an exact model of
+// the coder for repeated data and an upper bound for literal-heavy data.
 std::size_t estimate_coded_size(const std::uint8_t* data, std::size_t n);
 
 // Overhead (bytes) a transform adds to the stored block for its metadata.

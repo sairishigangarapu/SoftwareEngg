@@ -8,7 +8,9 @@ namespace uatc::core {
 
 std::size_t RleTransform::estimateCost(ByteSpan in) const {
     if (in.empty()) return 0;
-    // Each run costs 2 bytes regardless of its length.
+    // Each transform run is a (count, value) pair, and the coder prices
+    // every pair stream as literals unless a run of identical pairs emerges,
+    // so two bytes per input run is the exact price.
     std::size_t runs = 0;
     std::size_t i = 0;
     while (i < in.size) {

@@ -40,7 +40,8 @@ CodedBlock solve_block(const Block& block,
     entry.codec_id = plan.codecId;
 
     if (plan.stored) {
-        // Incompressible: keep the original bytes (FR-08).
+        // Incompressible: keep the original bytes (FR-08). The codec id is
+        // None, so the pair is a raw block end to end.
         entry.payload = block.data;
     } else {
         // Qualified: inside uatc::core the unqualified names would resolve
