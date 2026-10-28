@@ -256,9 +256,11 @@ int print_stats(const std::filesystem::path& input, std::size_t block_size) {
 int compress_file(const std::filesystem::path& input,
                   const std::filesystem::path& output,
                   std::size_t block_size,
+                  std::size_t workers,
                   bool quiet) {
     uatc::core::CompressOptions options;
     options.block_size = block_size;
+    options.workers = workers;
 
     ConsoleProgressSink sink;
     const auto result = uatc::core::CompressionManager::compress(
@@ -376,6 +378,7 @@ int main(int argc, char* argv[]) {
             const std::filesystem::path output = argv[3];
 
             std::size_t block_size = uatc::core::kDefaultBlockSize;
+            std::size_t workers = 1;
             bool quiet = false;
 
             for (int i = 4; i < argc; ++i) {
@@ -395,6 +398,19 @@ int main(int argc, char* argv[]) {
                                   << error.what() << '\n';
                         return 2;
                     }
+                } else if (option == "--workers") {
+                    if (i + 1 >= argc) {
+                        std::cerr << "error: E_INVALID_ARGUMENT: "
+                                  << "--workers needs a value.\n";
+                        return 2;
+                    }
+                    try {
+                        workers = parse_size(argv[++i], "--workers");
+                    } catch (const std::exception& error) {
+                        std::cerr << "error: E_INVALID_ARGUMENT: "
+                                  << error.what() << '\n';
+                        return 2;
+                    }
                 } else {
                     print_help();
                     std::cerr << "\nerror: E_INVALID_ARGUMENT: unknown option: "
@@ -403,7 +419,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            return compress_file(input, output, block_size, quiet);
+            return compress_file(input, output, block_size, workers, quiet);
         }
 
         if (command == "extract") {

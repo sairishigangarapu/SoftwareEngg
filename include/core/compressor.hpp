@@ -27,6 +27,8 @@ struct CompressResult {
     double ratio = 0.0;  // original / archive; below 1.0 means it grew
     std::map<TransformId, std::uint64_t> transformUsage;
 };
+// Options live in core/config.hpp alongside the block-size default; the
+// worker count is shared with the analyzer through CompressOptions.
 
 struct ExtractResult {
     std::filesystem::path destination;

@@ -24,6 +24,7 @@ CORE_SRCS = \
 	src/core/planner.cpp \
 	src/core/crc32.cpp \
 	src/core/sha256.cpp \
+	src/core/thread_pool.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
 	src/archive/archive_writer.cpp \
@@ -50,7 +51,9 @@ CORE_TESTS = \
 	tests/core/archive_integration_test \
 	tests/core/compressor_test \
 	tests/core/planner_test \
+	tests/core/thread_pool_test \
 	tests/core/crc32_test \
+	tests/core/parallel_test \
 	tests/core/sha256_test \
 	tests/core/integrity_test
 
@@ -126,7 +129,13 @@ tests/core/planner_test: tests/core/planner_test.cpp build/libuatc_core.a
 tests/core/crc32_test: tests/core/crc32_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
+tests/core/thread_pool_test: tests/core/thread_pool_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
 tests/core/sha256_test: tests/core/sha256_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/parallel_test: tests/core/parallel_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/integrity_test: tests/core/integrity_test.cpp build/libuatc_core.a

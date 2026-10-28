@@ -38,6 +38,7 @@ add_library(uatc_core
     src/core/planner.cpp
     src/core/crc32.cpp
     src/core/sha256.cpp
+    src/core/thread_pool.cpp
     src/archive/archive_inspector.cpp
     src/archive/archive_verifier.cpp
 )
@@ -244,6 +245,18 @@ if(BUILD_TESTING)
     target_link_libraries(core_integrity_test PRIVATE uatc_core)
     add_test(NAME core_integrity_tests COMMAND core_integrity_test)
 
+    add_executable(core_thread_pool_test
+        tests/core/thread_pool_test.cpp
+    )
+    target_link_libraries(core_thread_pool_test PRIVATE uatc_core)
+    add_test(NAME core_thread_pool_tests COMMAND core_thread_pool_test)
+
+    add_executable(core_parallel_test
+        tests/core/parallel_test.cpp
+    )
+    target_link_libraries(core_parallel_test PRIVATE uatc_core)
+    add_test(NAME core_parallel_tests COMMAND core_parallel_test)
+
     # All tests run from the project root so test_data paths work.
     set_tests_properties(
         filesystem_tests
@@ -269,6 +282,8 @@ if(BUILD_TESTING)
         core_crc32_tests
         core_sha256_tests
         core_integrity_tests
+        core_thread_pool_tests
+        core_parallel_tests
         integration_roundtrip_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

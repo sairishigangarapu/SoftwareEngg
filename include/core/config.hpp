@@ -18,6 +18,11 @@ struct Config {
 // Options for a compression or analysis run.
 struct CompressOptions {
     std::size_t block_size = kDefaultBlockSize;
+
+    // Worker threads for the block pipeline. 1 means the serial path.
+    // Results are identical for any worker count (FR-10, ADR-05), so this
+    // only affects speed, never the archive.
+    std::size_t workers = 1;
 };
 
 }  // namespace uatc::core
