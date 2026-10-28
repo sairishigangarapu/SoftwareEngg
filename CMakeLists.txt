@@ -37,6 +37,7 @@ add_library(uatc_core
     src/core/error.cpp
     src/core/planner.cpp
     src/core/crc32.cpp
+    src/core/sha256.cpp
     src/archive/archive_inspector.cpp
     src/archive/archive_verifier.cpp
 )
@@ -231,6 +232,18 @@ if(BUILD_TESTING)
     target_link_libraries(core_crc32_test PRIVATE uatc_core)
     add_test(NAME core_crc32_tests COMMAND core_crc32_test)
 
+    add_executable(core_sha256_test
+        tests/core/sha256_test.cpp
+    )
+    target_link_libraries(core_sha256_test PRIVATE uatc_core)
+    add_test(NAME core_sha256_tests COMMAND core_sha256_test)
+
+    add_executable(core_integrity_test
+        tests/core/integrity_test.cpp
+    )
+    target_link_libraries(core_integrity_test PRIVATE uatc_core)
+    add_test(NAME core_integrity_tests COMMAND core_integrity_test)
+
     # All tests run from the project root so test_data paths work.
     set_tests_properties(
         filesystem_tests
@@ -254,6 +267,8 @@ if(BUILD_TESTING)
         core_compressor_tests
         core_planner_tests
         core_crc32_tests
+        core_sha256_tests
+        core_integrity_tests
         integration_roundtrip_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

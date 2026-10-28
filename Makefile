@@ -23,6 +23,7 @@ CORE_SRCS = \
 	src/core/error.cpp \
 	src/core/planner.cpp \
 	src/core/crc32.cpp \
+	src/core/sha256.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
 	src/archive/archive_writer.cpp \
@@ -49,7 +50,9 @@ CORE_TESTS = \
 	tests/core/archive_integration_test \
 	tests/core/compressor_test \
 	tests/core/planner_test \
-	tests/core/crc32_test
+	tests/core/crc32_test \
+	tests/core/sha256_test \
+	tests/core/integrity_test
 
 CHAKSHU_TESTS = \
 	tests/filesystem_test \
@@ -121,6 +124,12 @@ tests/core/planner_test: tests/core/planner_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/crc32_test: tests/core/crc32_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/sha256_test: tests/core/sha256_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/integrity_test: tests/core/integrity_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Chakshu's tests ----

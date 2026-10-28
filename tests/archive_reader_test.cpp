@@ -360,16 +360,32 @@ int main() {
 
         std::cout << "TEST PASSED: Unsupported archive version rejected.\n";
 
-        // TEST 10: Truncated archive must be rejected.
+        // TEST 10: Truncated archive must be rejected. Truncating the last
+        // byte now removes part of the integrity footer, so "no integrity
+        // footer" is the natural diagnosis; truncating further back would
+        // hit the bounds check. Either rejection is the required behaviour
+        // (TC-ERR-01: rejected, distinct error, no crash).
         uatc::ArchiveWriter::write(
             truncated_archive, source_file, blocks);
 
         truncate_archive_by_one_byte(truncated_archive);
 
-        if (!expect_failure(truncated_archive,
-                            "Block payload extends beyond archive")) {
-            throw std::runtime_error(
-                "Truncated archive was not rejected with a bounds error.");
+        {
+            try {
+                uatc::ArchiveReader::read(truncated_archive);
+                throw std::runtime_error(
+                    "Truncated archive was accepted.");
+            } catch (const std::exception& e) {
+                const std::string message = e.what();
+                if (message.find("Block payload extends beyond archive") ==
+                        std::string::npos &&
+                    message.find("has no integrity footer") ==
+                        std::string::npos) {
+                    throw std::runtime_error(
+                        "Truncated archive rejected with an unexpected "
+                        "error: " + message);
+                }
+            }
         }
 
         std::cout << "TEST PASSED: Truncated archive rejected.\n";

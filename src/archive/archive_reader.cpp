@@ -11,9 +11,23 @@
 #include "archive/codec.hpp"
 #include "archive/transforms.hpp"
 #include "core/crc32.hpp"
+#include "core/sha256.hpp"
 #include "core/transform_factory.hpp"
 
 namespace uatc {
+
+// The integrity region appended after the payloads (SAD 4.1): a 32-byte file
+// SHA-256, a 32-byte archive SHA-256 over everything before it, and a
+// 12-byte footer carrying the header offset and the magic. Fixed size, so it
+// can be located from the end of the file without reading the rest.
+constexpr std::uint64_t FILE_SHA256_SIZE = core::kSha256Size;
+constexpr std::uint64_t ARCHIVE_SHA256_SIZE = core::kSha256Size;
+constexpr std::uint64_t FOOTER_SIZE = 12;
+constexpr std::uint64_t INTEGRITY_REGION_SIZE =
+    FILE_SHA256_SIZE + ARCHIVE_SHA256_SIZE + FOOTER_SIZE;
+constexpr std::uint64_t FILE_SHA256_OFFSET = 0;
+constexpr std::uint64_t ARCHIVE_SHA256_OFFSET =
+    INTEGRITY_REGION_SIZE - FOOTER_SIZE - ARCHIVE_SHA256_SIZE;
 
 namespace {
 
@@ -162,6 +176,42 @@ ArchivedFile ArchiveReader::read_file(
 
     const std::uint64_t archive_size =
         std::filesystem::file_size(archive_path);
+
+    // --- Integrity region (SAD 4.1): located from the end of the file. ---
+    if (archive_size < HEADER_SIZE + INTEGRITY_REGION_SIZE) {
+        throw std::runtime_error(
+            "The archive is too small to hold its integrity data."
+        );
+    }
+
+    std::vector<std::uint8_t> footer;
+    {
+        BinaryReader footer_reader(archive_path);
+        footer_reader.seekg(archive_size - FOOTER_SIZE);
+        footer = footer_reader.read_bytes(static_cast<std::size_t>(FOOTER_SIZE));
+    }
+
+    const std::uint32_t footer_magic =
+        static_cast<std::uint32_t>(footer[8]) |
+        (static_cast<std::uint32_t>(footer[9]) << 8) |
+        (static_cast<std::uint32_t>(footer[10]) << 16) |
+        (static_cast<std::uint32_t>(footer[11]) << 24);
+
+    if (footer_magic != UATC_MAGIC) {
+        throw std::runtime_error(
+            "The archive has no integrity footer: it is not a valid "
+            "UATC archive or was written by an unsupported version."
+        );
+    }
+
+    // The archive SHA-256 covers every byte before the integrity region. It
+    // is verified *last*, after the block checksums and the file checksum, so
+    // that the most specific diagnosis is the one reported: a flipped byte
+    // inside a payload is a block failure with its index (TC-INT-01), and a
+    // mismatch that survives every other check is an archive-level failure
+    // (TC-INT-02). The checksummed byte count is remembered for later.
+    const std::uint64_t checksummed_bytes =
+        archive_size - INTEGRITY_REGION_SIZE;
 
     BinaryReader reader(archive_path);
 
@@ -397,6 +447,56 @@ ArchivedFile ArchiveReader::read_file(
         throw std::runtime_error(
             "Reconstructed file size does not match metadata."
         );
+    }
+
+    // --- The file SHA-256, over the reconstructed original bytes. ---
+    {
+        auto state = core::sha256_begin();
+        core::sha256_feed(state, result.data(), result.size());
+        const auto file_digest = core::sha256_end(state);
+
+        std::vector<std::uint8_t> stored;
+        {
+            BinaryReader digest_reader(archive_path);
+            digest_reader.seekg(archive_size - INTEGRITY_REGION_SIZE +
+                                FILE_SHA256_OFFSET);
+            stored = digest_reader.read_bytes(
+                static_cast<std::size_t>(FILE_SHA256_SIZE));
+        }
+
+        for (std::size_t i = 0; i < FILE_SHA256_SIZE; ++i) {
+            if (file_digest[i] != stored[i]) {
+                throw std::runtime_error(
+                    "Archive file checksum mismatch."
+                );
+            }
+        }
+    }
+
+    // --- The archive SHA-256, over everything before the integrity region.
+    //     This is the last check: if the block checksums, the file checksum
+    //     and the structure all check out but the bytes were still altered,
+    //     the alteration is at archive level. ---
+    {
+        const auto actual =
+            core::sha256_of_file_prefix(archive_path, checksummed_bytes);
+
+        std::vector<std::uint8_t> stored;
+        {
+            BinaryReader digest_reader(archive_path);
+            digest_reader.seekg(archive_size - INTEGRITY_REGION_SIZE +
+                                ARCHIVE_SHA256_OFFSET);
+            stored = digest_reader.read_bytes(
+                static_cast<std::size_t>(ARCHIVE_SHA256_SIZE));
+        }
+
+        for (std::size_t i = 0; i < ARCHIVE_SHA256_SIZE; ++i) {
+            if (actual[i] != stored[i]) {
+                throw std::runtime_error(
+                    "Archive checksum mismatch."
+                );
+            }
+        }
     }
 
     return ArchivedFile{path, std::move(result)};
