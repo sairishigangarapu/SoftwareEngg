@@ -52,6 +52,7 @@ std::string codec_name(CodecId id) {
     switch (id) {
         case CodecId::None: return "Raw";
         case CodecId::Baseline: return "Baseline";
+        case CodecId::Huffman: return "Huffman";
     }
     throw std::runtime_error("Unsupported codec.");
 }
@@ -219,7 +220,8 @@ ArchiveInfo ArchiveInspector::inspect(
             throw std::runtime_error("Unsupported transform.");
         }
         if (codec_id != CodecId::None &&
-            codec_id != CodecId::Baseline) {
+            codec_id != CodecId::Baseline &&
+            codec_id != CodecId::Huffman) {
             throw std::runtime_error("Unsupported codec.");
         }
         if (transform_parameter != 0) {

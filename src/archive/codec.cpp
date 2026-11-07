@@ -1,5 +1,7 @@
 #include "archive/codec.hpp"
 
+#include "core/huffman_coder.hpp"
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -15,6 +17,14 @@ std::size_t run_length(const std::vector<std::uint8_t>& in, std::size_t pos) {
 std::vector<std::uint8_t> Codec::encode(
     const std::vector<std::uint8_t>& input, CodecId id) {
     if (id == CodecId::None) return input;
+
+    // Huffman delegates to the core coder, the same way the transform
+    // adapter delegates: one implementation, shared with the core.
+    if (id == CodecId::Huffman) {
+        core::HuffmanCoder coder;
+        return coder.encode(core::ByteSpan(input)).data;
+    }
+
     if (id != CodecId::Baseline)
         throw std::invalid_argument("Unsupported codec.");
 
@@ -52,6 +62,18 @@ std::vector<std::uint8_t> Codec::encode(
 std::vector<std::uint8_t> Codec::decode(
     const std::vector<std::uint8_t>& input, CodecId id) {
     if (id == CodecId::None) return input;
+
+    if (id == CodecId::Huffman) {
+        // The original size is carried by the Huffman payload header, so
+        // the decoder does not need it here.
+        core::HuffmanCoder coder;
+        std::size_t orig = 0;
+        for (int i = 0; i < 8; ++i) {
+            orig |= static_cast<std::size_t>(input[256 + i]) << (8 * i);
+        }
+        return coder.decode(core::ByteSpan(input), orig);
+    }
+
     if (id != CodecId::Baseline)
         throw std::runtime_error("Unsupported codec.");
 

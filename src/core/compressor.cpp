@@ -11,6 +11,7 @@
 #include "archive/transforms.hpp"
 #include "core/compressibility_probe.hpp"
 #include "core/error.hpp"
+#include "core/huffman_coder.hpp"
 #include "core/path_safety.hpp"
 #include "core/planner.hpp"
 #include "core/transform_factory.hpp"
@@ -40,15 +41,24 @@ CodedBlock solve_block(const Block& block,
     entry.codec_id = plan.codecId;
 
     if (plan.stored) {
-        // Incompressible: keep the original bytes (FR-08). The codec id is
-        // None, so the pair is a raw block end to end.
+        // Incompressible, or the coder-aware store decision kept the raw
+        // bytes (FR-08). The pair is None/None end to end.
         entry.payload = block.data;
+        return entry;
+    }
+
+    // Execute the plan: transform, then the codec the plan priced.
+    // Qualified: inside uatc::core the unqualified names would resolve to
+    // the core's Transform and EntropyCoder interfaces, not the archive
+    // layer's adapters over the same algorithms.
+    const auto transformed =
+        uatc::Transform::encode(block.data, plan.transformId);
+
+    if (plan.codecId == CodecId::Huffman) {
+        static const HuffmanCoder huffman;
+        entry.payload = huffman.encode(ByteSpan(transformed)).data;
     } else {
-        // Qualified: inside uatc::core the unqualified names would resolve
-        // to the core's Transform and EntropyCoder interfaces, not the
-        // archive layer's adapters over the same algorithms.
-        entry.payload = uatc::Transform::encode(block.data, plan.transformId);
-        entry.payload = uatc::Codec::encode(entry.payload, plan.codecId);
+        entry.payload = uatc::Codec::encode(transformed, CodecId::Baseline);
     }
     return entry;
 }

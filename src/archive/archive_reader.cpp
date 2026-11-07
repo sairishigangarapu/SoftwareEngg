@@ -138,7 +138,8 @@ void ArchiveReader::validate_block(
     }
 
     if (codec_id != CodecId::None &&
-        codec_id != CodecId::Baseline) {
+        codec_id != CodecId::Baseline &&
+        codec_id != CodecId::Huffman) {
         throw std::runtime_error("Unsupported codec.");
     }
 

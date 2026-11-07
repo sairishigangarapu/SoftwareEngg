@@ -3,7 +3,11 @@
 #include <numeric>
 
 #include "archive/block.hpp"
+#include "archive/transforms.hpp"
 #include "core/block_stats.hpp"
+#include "core/baseline_entropy_coder.hpp"
+#include "core/cost_estimator.hpp"
+#include "core/huffman_coder.hpp"
 #include "core/transform_factory.hpp"
 #include "filesystem/file_reader.hpp"
 
@@ -27,8 +31,8 @@ BlockPlan plan_block(
 
     plan.compressible = probe.is_compressible(data);
 
+    // Incompressible by the probe: store, no work (FR-05 -> FR-08).
     if (!plan.compressible) {
-        // Incompressible: keep the original bytes (FR-08).
         plan.transformId = TransformId::None;
         plan.codecId = CodecId::None;
         plan.estimatedCost = data.size;
@@ -36,19 +40,45 @@ BlockPlan plan_block(
         return plan;
     }
 
+    // Compressible: the raw cost is the bar every candidate has to beat.
+    const std::uint64_t raw_bar = data.size;
+
+    // The selector picks the best transform for the block. Its own
+    // store-versus-compress verdict is transform-only - it cannot see the
+    // entropy coders - so it is consulted for the transform choice and the
+    // final decision is made here, coder-aware.
     const auto selection = selector.select(data);
     plan.transformId = selection.transform_id;
-    plan.estimatedCost = selection.estimated_cost;
-    plan.stored = selection.stored_raw;
 
-    // A stored block has no codec: its payload is the original bytes.
-    // Tagging it with a codec would make the reader try to decode a
-    // payload that was never encoded.
-    if (plan.stored) {
+    const std::vector<std::uint8_t> input(data.begin(), data.end());
+    const auto transformed = uatc::Transform::encode(input, plan.transformId);
+
+    // Price both coders on the transformed bytes; the smaller wins.
+    static const BaselineEntropyCoder baseline;
+    static const HuffmanCoder huffman;
+    const auto baseline_cost = estimate_coded_size(
+        transformed.data(), transformed.size());
+    const auto huffman_result = huffman.encode(
+        ByteSpan(transformed.data(), transformed.size()));
+
+    std::size_t best_cost = baseline_cost;
+    CodecId best_codec = CodecId::Baseline;
+    if (huffman_result.data.size() < best_cost) {
+        best_cost = huffman_result.data.size();
+        best_codec = huffman.id();
+    }
+
+    // FR-08 with the real coder: the coded form plus its metadata must
+    // beat the raw bytes, or the block is stored.
+    if (best_cost + kTransformMetadataOverhead < raw_bar) {
+        plan.codecId = best_codec;
+        plan.estimatedCost = best_cost;
+        plan.stored = false;
+    } else {
         plan.transformId = TransformId::None;
         plan.codecId = CodecId::None;
-    } else {
-        plan.codecId = CodecId::Baseline;
+        plan.estimatedCost = raw_bar;
+        plan.stored = true;
     }
     return plan;
 }

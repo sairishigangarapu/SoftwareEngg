@@ -25,6 +25,7 @@ CORE_SRCS = \
 	src/core/crc32.cpp \
 	src/core/sha256.cpp \
 	src/core/thread_pool.cpp \
+	src/core/huffman_coder.cpp \
 	src/core/path_safety.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
@@ -55,6 +56,7 @@ CORE_TESTS = \
 	tests/core/thread_pool_test \
 	tests/core/crc32_test \
 	tests/core/parallel_test \
+	tests/core/huffman_test \
 	tests/core/path_safety_test \
 	tests/core/sha256_test \
 	tests/core/integrity_test
@@ -138,6 +140,9 @@ tests/core/sha256_test: tests/core/sha256_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/parallel_test: tests/core/parallel_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/huffman_test: tests/core/huffman_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/path_safety_test: tests/core/path_safety_test.cpp build/libuatc_core.a
