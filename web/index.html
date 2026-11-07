@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UATC</title>
+  <script>
+    // Live mode (?live) needs the API server: `uatc serve` first.
+    if (new URLSearchParams(location.search).has('live')) {
+      document.documentElement.dataset.live = '1';
+    }
+  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>

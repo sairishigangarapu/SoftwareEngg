@@ -26,6 +26,7 @@ CORE_SRCS = \
 	src/core/sha256.cpp \
 	src/core/thread_pool.cpp \
 	src/core/huffman_coder.cpp \
+	src/server/api_server.cpp \
 	src/core/path_safety.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
@@ -75,7 +76,10 @@ MANASA_TESTS = \
 	tests/archive_verifier_test \
 	tests/integration_roundtrip_test
 
-ALL_TESTS = $(CORE_TESTS) $(CHAKSHU_TESTS) $(MANASA_TESTS)
+SERVER_TESTS = \
+	tests/server/api_test
+
+ALL_TESTS = $(CORE_TESTS) $(CHAKSHU_TESTS) $(MANASA_TESTS) $(SERVER_TESTS)
 
 # ---- CLI executable (info / verify) ----
 CLI_BIN = build/uatc_cli
@@ -84,7 +88,7 @@ CLI_BIN = build/uatc_cli
 PC_BENCH = pcomp/build/pc_bench
 
 # ---- Default target ----
-.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests
+.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests server-tests
 
 all: $(ALL_TESTS) $(PC_BENCH) $(CLI_BIN)
 
@@ -141,6 +145,9 @@ tests/core/sha256_test: tests/core/sha256_test.cpp build/libuatc_core.a
 
 tests/core/parallel_test: tests/core/parallel_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/server/api_test: tests/server/api_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@ -pthread
 
 tests/core/huffman_test: tests/core/huffman_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@

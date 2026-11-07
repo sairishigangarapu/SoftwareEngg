@@ -14,6 +14,8 @@
 #include "core/transform_selector.hpp"
 #include "filesystem/file_reader.hpp"
 
+#include "server/api_server.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -464,6 +466,18 @@ std::vector<std::uint8_t> read_file_bytes(const std::filesystem::path& path) {
         std::istreambuf_iterator<char>());
 }
 
+// The API server: `uatc serve [--port N]` starts the localhost control
+// plane and blocks until interrupted.
+int serve(std::uint16_t port) {
+    uatc::server::ApiServer server(port);
+    std::cout
+        << "UATC API server listening on http://127.0.0.1:" << port
+        << "  (Ctrl-C to stop)\n"
+        << "  open the frontend with:  web/index.html?live\n";
+    server.serve_forever();
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -480,6 +494,22 @@ int main(int argc, char* argv[]) {
     }
 
     const std::string command = argv[1];
+
+    // serve [--port N]
+    if (command == "serve") {
+        std::uint16_t port = 8080;
+        for (int i = 2; i + 1 < argc; i += 2) {
+            if (std::string(argv[i]) == "--port") {
+                port = static_cast<std::uint16_t>(std::stoul(argv[i + 1]));
+            }
+        }
+        try {
+            return serve(port);
+        } catch (const std::exception& error) {
+            std::cerr << "error: E_IO: " << error.what() << '\n';
+            return 5;
+        }
+    }
 
     try {
         if (command == "stats") {
