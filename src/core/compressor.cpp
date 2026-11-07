@@ -27,12 +27,16 @@ namespace {
 // costs more than it saves on a small input (TC-PAR-05).
 constexpr std::uint64_t kParallelThreshold = 1024 * 1024;
 
+
+}  // namespace
+
 // Plans, transforms and entropy-codes one block. Pure: the result depends
 // only on the block's own bytes plus fixed parameters, which is what makes
 // parallel output identical to serial output (ADR-05).
-CodedBlock solve_block(const Block& block,
-                       const TransformSelector& selector,
-                       const CompressibilityProbe& probe) {
+CodedBlock CompressionManager::encode_block(
+    const Block& block,
+    const TransformSelector& selector,
+    const CompressibilityProbe& probe) {
     const auto plan = plan_block(ByteSpan(block.data), block.block_id,
                                  block.offset, selector, probe);
 
@@ -62,8 +66,6 @@ CodedBlock solve_block(const Block& block,
     }
     return entry;
 }
-
-}  // namespace
 
 CompressResult CompressionManager::compress(
     const std::filesystem::path& source,
@@ -111,13 +113,13 @@ CompressResult CompressionManager::compress(
         auto pool = make_thread_pool(workers, workers * 4);
         for (std::size_t i = 0; i < blocks.size(); ++i) {
             pool->submit([&blocks, &selector, &probe, &coded, i] {
-                coded[i] = solve_block(blocks[i], selector, probe);
+                coded[i] = encode_block(blocks[i], selector, probe);
             });
         }
         pool->wait_idle();  // barrier; rethrows a task exception if one failed
     } else {
         for (std::size_t i = 0; i < blocks.size(); ++i) {
-            coded[i] = solve_block(blocks[i], selector, probe);
+            coded[i] = encode_block(blocks[i], selector, probe);
         }
     }
 
