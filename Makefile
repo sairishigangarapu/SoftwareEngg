@@ -211,9 +211,9 @@ test: $(ALL_TESTS)
 	@echo "ALL TESTS PASSED"
 
 # ---- pcomp benchmark ----
-$(PC_BENCH): pcomp/src/block_loop.cpp pcomp/bench/bench_main.cpp
+$(PC_BENCH): pcomp/src/block_loop.cpp pcomp/src/thread_pool.cpp pcomp/bench/bench_main.cpp
 	mkdir -p pcomp/build
-	$(CXX) $(PC_CXXFLAGS) pcomp/src/block_loop.cpp pcomp/bench/bench_main.cpp -o $@
+	$(CXX) $(PC_CXXFLAGS) pcomp/src/block_loop.cpp pcomp/src/thread_pool.cpp pcomp/bench/bench_main.cpp -o $@ -pthread
 
 pc_bench: $(PC_BENCH)
 
