@@ -62,7 +62,9 @@ int main() {
     write_file(source, data);
 
     CompressOptions options;
-    options.block_size = 256 * 1024;  // 16 blocks
+    options.block_size = 256 * 1024;
+    const std::size_t expected_blocks =
+        (data.size() + options.block_size - 1) / options.block_size;
 
     // --- TC-PAR-01: 1 worker and 8 workers give byte-identical archives ---
     std::vector<std::uint8_t> one_worker_archive;
@@ -72,7 +74,7 @@ int main() {
         const auto archive = work / ("par_" + std::to_string(workers) + ".uatc");
 
         const auto result = CompressionManager::compress(source, archive, options);
-        assert(result.blockCount == 16);
+        assert(result.blockCount == expected_blocks);
 
         auto archive_bytes = read_bytes_safe(archive);
         if (workers == 1) {
@@ -96,8 +98,8 @@ int main() {
 
         options.workers = 8;
         CompressionManager::compress(source, work / "order.uatc", options, &sink);
-        assert(sink.order.size() == 16);
-        for (std::uint64_t i = 0; i < 16; ++i) assert(sink.order[i] == i);
+        assert(sink.order.size() == expected_blocks);
+        for (std::uint64_t i = 0; i < expected_blocks; ++i) assert(sink.order[i] == i);
     }
 
     // --- Every parallel archive still round-trips ---
