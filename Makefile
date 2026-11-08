@@ -60,6 +60,7 @@ CORE_TESTS = \
 	tests/core/parallel_test \
 	tests/core/huffman_test \
 	tests/core/multi_file_test \
+	tests/core/dir_cli_test \
 	tests/core/path_safety_test \
 	tests/core/sha256_test \
 	tests/core/integrity_test
@@ -155,6 +156,9 @@ tests/core/huffman_test: tests/core/huffman_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/multi_file_test: tests/core/multi_file_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/dir_cli_test: tests/core/dir_cli_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/path_safety_test: tests/core/path_safety_test.cpp build/libuatc_core.a

@@ -279,6 +279,12 @@ if(BUILD_TESTING)
     target_link_libraries(core_multi_file_test PRIVATE uatc_core)
     add_test(NAME core_multi_file_tests COMMAND core_multi_file_test)
 
+    add_executable(core_dir_cli_test
+        tests/core/dir_cli_test.cpp
+    )
+    target_link_libraries(core_dir_cli_test PRIVATE uatc_core)
+    add_test(NAME core_dir_cli_tests COMMAND core_dir_cli_test)
+
     find_package(Threads REQUIRED)
     add_executable(server_api_test
         tests/server/api_test.cpp
@@ -316,6 +322,7 @@ if(BUILD_TESTING)
         core_path_safety_tests
         core_huffman_tests
         core_multi_file_tests
+        core_dir_cli_tests
         server_api_tests
         integration_roundtrip_tests
         PROPERTIES
