@@ -45,20 +45,20 @@ pipeline {
         stage('SonarQube analysis') {
             steps {
                 // Course tooling list: SonarQube quality gate. The scanner
-                // runs as a container; if SONAR_HOST_URL/SONAR_TOKEN are
-                // unset the stage is skipped rather than failing the build.
+                // reads sonar-project.properties from the working directory,
+                // so it needs no command-line arguments. It runs as a
+                // container; if SONAR_HOST_URL/SONAR_TOKEN are unset the
+                // stage is skipped rather than failing the build.
                 script {
                     if (env.SONAR_HOST_URL && env.SONAR_TOKEN) {
+                        // The C/C++ analysis needs the compilation database.
+                        sh 'cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
                         sh '''
                           docker run --rm \
                             -e SONAR_HOST_URL="$SONAR_HOST_URL" \
                             -e SONAR_TOKEN="$SONAR_TOKEN" \
                             -v "$PWD:/usr/src" \
-                            sonarsource/sonar-scanner-cli:latest \
-                            -Dsonar.projectKey=uatc \
-                            -Dsonar.sources=src,include \
-                            -Dsonar.tests=tests \
-                            -Dsonar.cfamily.build-wrapper-output=bw-output
+                            sonarsource/sonar-scanner-cli:latest
                         '''
                     } else {
                         echo 'SonarQube credentials not set - skipping analysis'

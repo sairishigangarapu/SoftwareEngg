@@ -34,7 +34,7 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 
 ---
 
-# 1. Root files (8)
+# 1. Root files (11)
 
 | File | What it is |
 |---|---|
@@ -42,6 +42,9 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 | **Makefile** | cmake-free fallback — cmake is not installed on the lab machines and there is no sudo. `CORE_SRCS` → `.o` objects → `build/libuatc_core.a`; one rule per test binary; targets `all`, `test`, `bench`, `run-bench`, `cli`, `pc_bench`, `clean`. |
 | **README.md** | Project overview: what UATC is, objectives, technologies (C++17, CMake, CTest, GoogleTest, Git), build and test instructions, development workflow. |
 | **.gitignore** | Excludes `build/`, `*.o`, `*.log`, `node_modules/`, `RocketMoney/`, the test binaries and `.commandcode/`. |
+| **sonar-project.properties** | SonarQube/SonarCloud scanner config: project key, sources, tests, exclusions and the compilation database path. The scanner picks it up with zero command-line arguments. |
+| **Dockerfile** | Ubuntu 24.04 image that builds through CMakeLists.txt and runs ctest inside the container, so the suite is reproducible on any machine (TC-NFR-06). |
+| **Jenkinsfile** | The CI pipeline: install, build, test, SonarQube analysis (credentials-gated), a benchmark smoke check and the demo script. |
 | **Lab1_Requirements_Engineering.md** | Lab 1 deliverable for a *different* project (Subscription & Recurring Expense Auditor) — its own FR/NFR table and a Mermaid use-case diagram. Not part of the UATC code. |
 | **UATC_SAD.pdf** | Software Architecture & Design. Component ownership, ADRs 01–07, the archive format specification, sequence diagrams, API design, error codes, UX. The contract the code implements. |
 | **UATC_SRS.pdf** | Software Requirements Specification. FR-01…FR-15, NFRs, archive format requirements, use cases UC-1…UC-5, team ownership split, six-phase plan of work. |
