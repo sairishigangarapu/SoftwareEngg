@@ -1,6 +1,0 @@
-organization=sairishigangarapu
-projectKey=uatc
-serverUrl=https://sonarcloud.io
-dashboardUrl=https://sonarcloud.io/dashboard?id=uatc
-ceTaskId=AaG6Tq2cDnatzzXULFx8
-ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AaG6Tq2cDnatzzXULFx8

@@ -34,3 +34,4 @@ tests/integration_roundtrip_test
 .commandcode/
 command-code-session-*.html
 
+.scannerwork/
