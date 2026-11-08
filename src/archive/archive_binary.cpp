@@ -22,7 +22,9 @@ BinaryWriter::BinaryWriter(
 }
 
 BinaryWriter::~BinaryWriter() {
-    file_.close();
+    // The ofstream destructor closes the file. An explicit close() in a
+    // destructor could throw during stack unwinding (Sonar rule S1048),
+    // and the stream's own cleanup is sufficient.
 }
 
 void BinaryWriter::write_u8(
@@ -163,7 +165,7 @@ BinaryReader::BinaryReader(
 }
 
 BinaryReader::~BinaryReader() {
-    file_.close();
+    // Same reasoning as BinaryWriter: the ofstream destructor handles it.
 }
 
 std::uint8_t BinaryReader::read_u8() {
