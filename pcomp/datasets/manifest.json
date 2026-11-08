@@ -12,8 +12,8 @@
     {
       "category": "source",
       "path": "source/headers.c",
-      "bytes": 1327500,
-      "sha256": "6f8e8abebdceb4d1c86fb5fbd58c6aa7782dcf4ddae8f165311aa7b1ee65610d",
+      "bytes": 2543595,
+      "sha256": "283517b4e8af6fe30c404bf4ca44be7aa585329d9fdf95105ee42b7f0ea6ac8b",
       "description": "Concatenated C headers (system dependent!)",
       "generator": "/usr/include/*.h sorted"
     },

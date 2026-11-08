@@ -13,8 +13,11 @@
 #include <string>
 
 #include "archive/archive_format.hpp"
+#include "archive/archive_writer.hpp"
+#include "core/compressibility_probe.hpp"
 #include "core/config.hpp"
 #include "core/progress.hpp"
+#include "core/transform_selector.hpp"
 
 namespace uatc::core {
 
@@ -53,6 +56,13 @@ class CompressionManager {
     static ExtractResult extract(
         const std::filesystem::path& archive,
         const std::filesystem::path& outputDirectory
+    );
+
+    // Exposed for the multi-file path: one block's plan and encoding. Pure.
+    static CodedBlock encode_block(
+        const Block& block,
+        const TransformSelector& selector,
+        const CompressibilityProbe& probe
     );
 };
 

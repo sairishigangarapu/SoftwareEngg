@@ -1,13 +1,14 @@
 
 /*
  * UATC web shell.
- * Mock mode is enabled by default.
- * No actual compression or extraction is performed in mock mode.
+ * Mock mode is on by default; add ?live to the URL to talk to the real
+ * backend (`uatc serve`). No compression logic lives here either way.
  */
-
-const USE_MOCK = true;
+const USE_MOCK = !new URLSearchParams(location.search).has('live');
 const MOCK_FAIL = new URLSearchParams(location.search).has('fail');
-const API = '/api';
+// Live mode talks to the API server (`uatc serve`, port 8080); mock mode
+// has no backend at all.
+const API = USE_MOCK ? '/api' : 'http://127.0.0.1:8080/api';
 
 const MESSAGES = {
   E_INVALID_ARGUMENT: 'Please check the selected file and input fields.',

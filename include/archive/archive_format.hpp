@@ -24,7 +24,8 @@ enum class TransformId : std::uint8_t {
 
 enum class CodecId : std::uint8_t {
     None = 0,
-    Baseline = 1
+    Baseline = 1,
+    Huffman = 2
 };
 
 struct ArchiveHeader {

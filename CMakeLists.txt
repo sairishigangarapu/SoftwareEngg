@@ -17,6 +17,7 @@ add_library(uatc_core
     src/archive/archive_binary.cpp
     src/archive/archive_reader.cpp
     src/archive/archive_writer.cpp
+    src/archive/multi_file.cpp
     src/archive/block.cpp
     src/archive/codec.cpp
     src/archive/transforms.cpp
@@ -39,6 +40,8 @@ add_library(uatc_core
     src/core/crc32.cpp
     src/core/sha256.cpp
     src/core/thread_pool.cpp
+    src/core/huffman_coder.cpp
+    src/server/api_server.cpp
     src/core/path_safety.cpp
     src/archive/archive_inspector.cpp
     src/archive/archive_verifier.cpp
@@ -264,6 +267,31 @@ if(BUILD_TESTING)
     target_link_libraries(core_path_safety_test PRIVATE uatc_core)
     add_test(NAME core_path_safety_tests COMMAND core_path_safety_test)
 
+    add_executable(core_huffman_test
+        tests/core/huffman_test.cpp
+    )
+    target_link_libraries(core_huffman_test PRIVATE uatc_core)
+    add_test(NAME core_huffman_tests COMMAND core_huffman_test)
+
+    add_executable(core_multi_file_test
+        tests/core/multi_file_test.cpp
+    )
+    target_link_libraries(core_multi_file_test PRIVATE uatc_core)
+    add_test(NAME core_multi_file_tests COMMAND core_multi_file_test)
+
+    add_executable(core_dir_cli_test
+        tests/core/dir_cli_test.cpp
+    )
+    target_link_libraries(core_dir_cli_test PRIVATE uatc_core)
+    add_test(NAME core_dir_cli_tests COMMAND core_dir_cli_test)
+
+    find_package(Threads REQUIRED)
+    add_executable(server_api_test
+        tests/server/api_test.cpp
+    )
+    target_link_libraries(server_api_test PRIVATE uatc_core Threads::Threads)
+    add_test(NAME server_api_tests COMMAND server_api_test)
+
     # All tests run from the project root so test_data paths work.
     set_tests_properties(
         filesystem_tests
@@ -292,6 +320,10 @@ if(BUILD_TESTING)
         core_thread_pool_tests
         core_parallel_tests
         core_path_safety_tests
+        core_huffman_tests
+        core_multi_file_tests
+        core_dir_cli_tests
+        server_api_tests
         integration_roundtrip_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

@@ -8,6 +8,7 @@
 #include "archive/archive_format.hpp"
 
 int main() {
+    using namespace uatc;
     using namespace uatc::core;
 
     NoneTransform none;

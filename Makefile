@@ -25,10 +25,13 @@ CORE_SRCS = \
 	src/core/crc32.cpp \
 	src/core/sha256.cpp \
 	src/core/thread_pool.cpp \
+	src/core/huffman_coder.cpp \
+	src/server/api_server.cpp \
 	src/core/path_safety.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
 	src/archive/archive_writer.cpp \
+	src/archive/multi_file.cpp \
 	src/archive/block.cpp \
 	src/archive/codec.cpp \
 	src/archive/transforms.cpp \
@@ -55,6 +58,9 @@ CORE_TESTS = \
 	tests/core/thread_pool_test \
 	tests/core/crc32_test \
 	tests/core/parallel_test \
+	tests/core/huffman_test \
+	tests/core/multi_file_test \
+	tests/core/dir_cli_test \
 	tests/core/path_safety_test \
 	tests/core/sha256_test \
 	tests/core/integrity_test
@@ -73,7 +79,10 @@ MANASA_TESTS = \
 	tests/archive_verifier_test \
 	tests/integration_roundtrip_test
 
-ALL_TESTS = $(CORE_TESTS) $(CHAKSHU_TESTS) $(MANASA_TESTS)
+SERVER_TESTS = \
+	tests/server/api_test
+
+ALL_TESTS = $(CORE_TESTS) $(CHAKSHU_TESTS) $(MANASA_TESTS) $(SERVER_TESTS)
 
 # ---- CLI executable (info / verify) ----
 CLI_BIN = build/uatc_cli
@@ -82,7 +91,7 @@ CLI_BIN = build/uatc_cli
 PC_BENCH = pcomp/build/pc_bench
 
 # ---- Default target ----
-.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests
+.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests server-tests
 
 all: $(ALL_TESTS) $(PC_BENCH) $(CLI_BIN)
 
@@ -140,6 +149,18 @@ tests/core/sha256_test: tests/core/sha256_test.cpp build/libuatc_core.a
 tests/core/parallel_test: tests/core/parallel_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
+tests/server/api_test: tests/server/api_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@ -pthread
+
+tests/core/huffman_test: tests/core/huffman_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/multi_file_test: tests/core/multi_file_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/dir_cli_test: tests/core/dir_cli_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
 tests/core/path_safety_test: tests/core/path_safety_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
@@ -194,9 +215,9 @@ test: $(ALL_TESTS)
 	@echo "ALL TESTS PASSED"
 
 # ---- pcomp benchmark ----
-$(PC_BENCH): pcomp/src/block_loop.cpp pcomp/bench/bench_main.cpp
+$(PC_BENCH): pcomp/src/block_loop.cpp pcomp/src/thread_pool.cpp pcomp/bench/bench_main.cpp
 	mkdir -p pcomp/build
-	$(CXX) $(PC_CXXFLAGS) pcomp/src/block_loop.cpp pcomp/bench/bench_main.cpp -o $@
+	$(CXX) $(PC_CXXFLAGS) pcomp/src/block_loop.cpp pcomp/src/thread_pool.cpp pcomp/bench/bench_main.cpp -o $@ -pthread
 
 pc_bench: $(PC_BENCH)
 

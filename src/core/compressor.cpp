@@ -11,6 +11,7 @@
 #include "archive/transforms.hpp"
 #include "core/compressibility_probe.hpp"
 #include "core/error.hpp"
+#include "core/huffman_coder.hpp"
 #include "core/path_safety.hpp"
 #include "core/planner.hpp"
 #include "core/transform_factory.hpp"
@@ -26,12 +27,16 @@ namespace {
 // costs more than it saves on a small input (TC-PAR-05).
 constexpr std::uint64_t kParallelThreshold = 1024 * 1024;
 
+
+}  // namespace
+
 // Plans, transforms and entropy-codes one block. Pure: the result depends
 // only on the block's own bytes plus fixed parameters, which is what makes
 // parallel output identical to serial output (ADR-05).
-CodedBlock solve_block(const Block& block,
-                       const TransformSelector& selector,
-                       const CompressibilityProbe& probe) {
+CodedBlock CompressionManager::encode_block(
+    const Block& block,
+    const TransformSelector& selector,
+    const CompressibilityProbe& probe) {
     const auto plan = plan_block(ByteSpan(block.data), block.block_id,
                                  block.offset, selector, probe);
 
@@ -40,20 +45,27 @@ CodedBlock solve_block(const Block& block,
     entry.codec_id = plan.codecId;
 
     if (plan.stored) {
-        // Incompressible: keep the original bytes (FR-08). The codec id is
-        // None, so the pair is a raw block end to end.
+        // Incompressible, or the coder-aware store decision kept the raw
+        // bytes (FR-08). The pair is None/None end to end.
         entry.payload = block.data;
+        return entry;
+    }
+
+    // Execute the plan: transform, then the codec the plan priced.
+    // Qualified: inside uatc::core the unqualified names would resolve to
+    // the core's Transform and EntropyCoder interfaces, not the archive
+    // layer's adapters over the same algorithms.
+    const auto transformed =
+        uatc::Transform::encode(block.data, plan.transformId);
+
+    if (plan.codecId == CodecId::Huffman) {
+        static const HuffmanCoder huffman;
+        entry.payload = huffman.encode(ByteSpan(transformed)).data;
     } else {
-        // Qualified: inside uatc::core the unqualified names would resolve
-        // to the core's Transform and EntropyCoder interfaces, not the
-        // archive layer's adapters over the same algorithms.
-        entry.payload = uatc::Transform::encode(block.data, plan.transformId);
-        entry.payload = uatc::Codec::encode(entry.payload, plan.codecId);
+        entry.payload = uatc::Codec::encode(transformed, CodecId::Baseline);
     }
     return entry;
 }
-
-}  // namespace
 
 CompressResult CompressionManager::compress(
     const std::filesystem::path& source,
@@ -101,13 +113,13 @@ CompressResult CompressionManager::compress(
         auto pool = make_thread_pool(workers, workers * 4);
         for (std::size_t i = 0; i < blocks.size(); ++i) {
             pool->submit([&blocks, &selector, &probe, &coded, i] {
-                coded[i] = solve_block(blocks[i], selector, probe);
+                coded[i] = encode_block(blocks[i], selector, probe);
             });
         }
         pool->wait_idle();  // barrier; rethrows a task exception if one failed
     } else {
         for (std::size_t i = 0; i < blocks.size(); ++i) {
-            coded[i] = solve_block(blocks[i], selector, probe);
+            coded[i] = encode_block(blocks[i], selector, probe);
         }
     }
 
