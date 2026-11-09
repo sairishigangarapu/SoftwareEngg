@@ -367,9 +367,9 @@ int main() {
         truncate_archive_by_one_byte(truncated_archive);
 
         if (!expect_failure(truncated_archive,
-                            "Block payload extends beyond archive")) {
+                            "integrity footer is invalid")) {
             throw std::runtime_error(
-                "Truncated archive was not rejected with a bounds error.");
+                "Truncated archive was not rejected as a damaged footer.");
         }
 
         std::cout << "TEST PASSED: Truncated archive rejected.\n";

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -13,6 +14,7 @@
 #include "archive/codec.hpp"
 #include "archive/transforms.hpp"
 #include "core/crc32.hpp"
+#include "core/sha256.hpp"
 
 namespace uatc {
 
@@ -211,74 +213,129 @@ void ArchiveWriter::write(
         UATC_BLOCK_RECORD_SIZE *
             static_cast<std::uint64_t>(prepared.size());
 
-    BinaryWriter writer(archive_path);
+    std::uint64_t archive_bytes_before_integrity = 0;
+    {
+        BinaryWriter writer(archive_path);
 
-    // Archive header.
-    writer.write_u32(header.magic);
-    writer.write_u16(header.version);
-    writer.write_u16(header.header_size);
-    writer.write_u32(header.file_count);
-    writer.write_u32(header.block_count);
-    writer.write_u64(header.file_table_offset);
-    writer.write_u64(header.block_index_offset);
-    writer.write_u64(header.payload_offset);
+        writer.write_u32(header.magic);
+        writer.write_u16(header.version);
+        writer.write_u16(header.header_size);
+        writer.write_u32(header.file_count);
+        writer.write_u32(header.block_count);
+        writer.write_u64(header.file_table_offset);
+        writer.write_u64(header.block_index_offset);
+        writer.write_u64(header.payload_offset);
 
-    // File record.
-    writer.write_u32(0);
-    writer.write_u64(path_offset);
-    writer.write_u32(
-        static_cast<std::uint32_t>(relative_path.size())
-    );
-    writer.write_u64(original_size);
-    writer.write_u32(
-        prepared.empty() ? 0 : prepared.front().block.block_id
-    );
-    writer.write_u32(
-        static_cast<std::uint32_t>(prepared.size())
-    );
-
-    writer.write_string(relative_path);
-
-    // Block index. Payload offsets follow the same deterministic order.
-    std::uint64_t current_payload_offset = header.payload_offset;
-
-    for (const auto& item : prepared) {
         writer.write_u32(0);
-        writer.write_u32(item.block.block_id);
-        writer.write_u64(current_payload_offset);
-        writer.write_u64(
-            static_cast<std::uint64_t>(item.block.data.size())
+        writer.write_u64(path_offset);
+        writer.write_u32(
+            static_cast<std::uint32_t>(relative_path.size())
         );
-        writer.write_u64(
-            static_cast<std::uint64_t>(item.payload.size())
+        writer.write_u64(original_size);
+        writer.write_u32(
+            prepared.empty() ? 0 : prepared.front().block.block_id
         );
+        writer.write_u32(
+            static_cast<std::uint32_t>(prepared.size())
+        );
+        writer.write_string(relative_path);
 
-        writer.write_u8(
-            static_cast<std::uint8_t>(item.encoding.transform_id)
-        );
-        writer.write_u8(
-            static_cast<std::uint8_t>(item.encoding.codec_id)
-        );
-        writer.write_u16(0);
-        writer.write_u32(item.checksum);
-
-        const std::uint64_t payload_size =
-            static_cast<std::uint64_t>(item.payload.size());
-
-        if (payload_size >
-            std::numeric_limits<std::uint64_t>::max() -
-                current_payload_offset) {
-            throw std::invalid_argument(
-                "Archive payload offset exceeds format limits."
+        std::uint64_t current_payload_offset = header.payload_offset;
+        for (const auto& item : prepared) {
+            writer.write_u32(0);
+            writer.write_u32(item.block.block_id);
+            writer.write_u64(current_payload_offset);
+            writer.write_u64(
+                static_cast<std::uint64_t>(item.block.data.size())
             );
+            writer.write_u64(
+                static_cast<std::uint64_t>(item.payload.size())
+            );
+            writer.write_u8(
+                static_cast<std::uint8_t>(item.encoding.transform_id)
+            );
+            writer.write_u8(
+                static_cast<std::uint8_t>(item.encoding.codec_id)
+            );
+            writer.write_u16(0);
+            writer.write_u32(item.checksum);
+
+            const std::uint64_t payload_size =
+                static_cast<std::uint64_t>(item.payload.size());
+            if (payload_size >
+                std::numeric_limits<std::uint64_t>::max() -
+                    current_payload_offset) {
+                throw std::invalid_argument(
+                    "Archive payload offset exceeds format limits."
+                );
+            }
+            current_payload_offset += payload_size;
         }
 
-        current_payload_offset += payload_size;
+        for (const auto& item : prepared) {
+            writer.write_bytes(item.payload);
+        }
+        archive_bytes_before_integrity = writer.position();
     }
 
-    // Payloads must be written in the same order as their index records.
+    auto file_hash = core::sha256_begin();
     for (const auto& item : prepared) {
-        writer.write_bytes(item.payload);
+        core::sha256_feed(
+            file_hash,
+            item.block.data.data(),
+            item.block.data.size()
+        );
+    }
+
+    std::vector<std::uint8_t> integrity;
+    integrity.reserve(
+        static_cast<std::size_t>(UATC_INTEGRITY_REGION_SIZE)
+    );
+    const auto file_digest = core::sha256_end(file_hash);
+    integrity.insert(
+        integrity.end(),
+        file_digest.begin(),
+        file_digest.end()
+    );
+
+    const auto archive_digest = core::sha256_of_file_prefix(
+        archive_path,
+        archive_bytes_before_integrity
+    );
+    integrity.insert(
+        integrity.end(),
+        archive_digest.begin(),
+        archive_digest.end()
+    );
+
+    for (int i = 0; i < 8; ++i) {
+        integrity.push_back(0);
+    }
+    for (int i = 0; i < 4; ++i) {
+        integrity.push_back(
+            static_cast<std::uint8_t>(UATC_MAGIC >> (i * 8))
+        );
+    }
+
+    std::ofstream output(
+        archive_path,
+        std::ios::binary | std::ios::app
+    );
+    if (!output) {
+        throw std::runtime_error(
+            "Could not reopen the archive for its integrity data: " +
+            archive_path.string()
+        );
+    }
+    output.write(
+        reinterpret_cast<const char*>(integrity.data()),
+        static_cast<std::streamsize>(integrity.size())
+    );
+    output.close();
+    if (!output) {
+        throw std::runtime_error(
+            "Failed to write the archive integrity data."
+        );
     }
 }
 

@@ -38,6 +38,7 @@ add_library(uatc_core
     src/core/error.cpp
     src/core/planner.cpp
     src/core/crc32.cpp
+    src/core/sha256.cpp
 
     src/archive/archive_inspector.cpp
     src/archive/archive_verifier.cpp
@@ -188,6 +189,13 @@ if(BUILD_TESTING)
     add_executable(core_crc32_test tests/core/crc32_test.cpp)
     target_link_libraries(core_crc32_test PRIVATE uatc_core)
     add_test(NAME core_crc32_tests COMMAND core_crc32_test)
+    add_executable(core_sha256_test tests/core/sha256_test.cpp)
+    target_link_libraries(core_sha256_test PRIVATE uatc_core)
+    add_test(NAME core_sha256_tests COMMAND core_sha256_test)
+
+    add_executable(core_integrity_test tests/core/integrity_test.cpp)
+    target_link_libraries(core_integrity_test PRIVATE uatc_core)
+    add_test(NAME core_integrity_tests COMMAND core_integrity_test)
 
     # End-to-end round-trip test
     add_executable(integration_roundtrip_test

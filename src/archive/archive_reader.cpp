@@ -1,6 +1,7 @@
 
 #include "archive/archive_reader.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -11,6 +12,8 @@
 #include "archive/codec.hpp"
 #include "archive/transforms.hpp"
 #include "core/crc32.hpp"
+#include "core/error.hpp"
+#include "core/sha256.hpp"
 #include "core/transform_factory.hpp"
 
 namespace uatc {
@@ -25,6 +28,8 @@ constexpr std::uint64_t FILE_RECORD_SIZE =
 
 constexpr std::uint64_t BLOCK_RECORD_SIZE =
     UATC_BLOCK_RECORD_SIZE;
+constexpr std::uint64_t FILE_SHA256_OFFSET = 0;
+constexpr std::uint64_t ARCHIVE_SHA256_OFFSET = UATC_SHA256_SIZE;
 
 // CRC-32/ISO-HDLC checksum of the original block data.
 std::uint32_t calculate_checksum(
@@ -162,6 +167,25 @@ ArchivedFile ArchiveReader::read_file(
 
     const std::uint64_t archive_size =
         std::filesystem::file_size(archive_path);
+    if (archive_size < UATC_INTEGRITY_REGION_SIZE) {
+        throw core::UatcError(
+            core::ErrorCode::MalformedArchive,
+            "Archive is truncated or missing its integrity footer."
+        );
+    }
+
+    const std::uint64_t data_region_size =
+        archive_size - UATC_INTEGRITY_REGION_SIZE;
+    BinaryReader footer_reader(archive_path);
+    footer_reader.seekg(archive_size - UATC_ARCHIVE_FOOTER_SIZE);
+    const std::uint64_t header_offset = footer_reader.read_u64();
+    const std::uint32_t footer_magic = footer_reader.read_u32();
+    if (header_offset != 0 || footer_magic != UATC_MAGIC) {
+        throw core::UatcError(
+            core::ErrorCode::MalformedArchive,
+            "Archive integrity footer is invalid."
+        );
+    }
 
     BinaryReader reader(archive_path);
 
@@ -177,14 +201,17 @@ ArchivedFile ArchiveReader::read_file(
 
     validate_header(header);
 
-    if (header.header_size > archive_size) {
+    if (header.header_size > data_region_size) {
         throw std::runtime_error("Archive is truncated.");
+    }
+    if (header.payload_offset > data_region_size) {
+        throw std::runtime_error("Payload offset exceeds archive data region.");
     }
 
     const std::uint64_t file_table_end =
         checked_add(header.file_table_offset, FILE_RECORD_SIZE);
 
-    if (file_table_end > archive_size) {
+    if (file_table_end > data_region_size) {
         throw std::runtime_error(
             "File table extends beyond archive."
         );
@@ -215,7 +242,7 @@ ArchivedFile ArchiveReader::read_file(
         checked_add(path_offset, path_length);
 
     if (path_offset < file_table_end ||
-        path_end > archive_size ||
+        path_end > data_region_size ||
         path_end > header.block_index_offset) {
         throw std::runtime_error(
             "File path extends beyond its valid archive region."
@@ -312,7 +339,7 @@ ArchivedFile ArchiveReader::read_file(
             checked_add(payload_offset, stored_length);
 
         if (payload_offset < header.payload_offset ||
-            payload_end > archive_size) {
+            payload_end > data_region_size) {
             throw std::runtime_error(
                 "Block payload extends beyond archive."
             );
@@ -375,8 +402,10 @@ ArchivedFile ArchiveReader::read_file(
 
         // Checksum is calculated over the reconstructed original bytes.
         if (calculate_checksum(decoded) != block.checksum) {
-            throw std::runtime_error(
-                "Block checksum mismatch."
+            throw core::UatcError(
+                core::ErrorCode::BlockChecksum,
+                "Block checksum mismatch at block " +
+                    std::to_string(block.block_id) + "."
             );
         }
 
@@ -399,6 +428,38 @@ ArchivedFile ArchiveReader::read_file(
         );
     }
 
+    const auto file_digest = core::sha256(result.data(), result.size());
+    reader.seekg(data_region_size + FILE_SHA256_OFFSET);
+    const auto stored_file_digest = reader.read_bytes(
+        static_cast<std::size_t>(UATC_SHA256_SIZE)
+    );
+    if (!std::equal(
+            file_digest.begin(),
+            file_digest.end(),
+            stored_file_digest.begin())) {
+        throw core::UatcError(
+            core::ErrorCode::ArchiveChecksum,
+            "File SHA-256 mismatch."
+        );
+    }
+
+    const auto archive_digest = core::sha256_of_file_prefix(
+        archive_path,
+        data_region_size
+    );
+    reader.seekg(data_region_size + ARCHIVE_SHA256_OFFSET);
+    const auto stored_archive_digest = reader.read_bytes(
+        static_cast<std::size_t>(UATC_SHA256_SIZE)
+    );
+    if (!std::equal(
+            archive_digest.begin(),
+            archive_digest.end(),
+            stored_archive_digest.begin())) {
+        throw core::UatcError(
+            core::ErrorCode::ArchiveChecksum,
+            "Archive SHA-256 mismatch."
+        );
+    }
     return ArchivedFile{path, std::move(result)};
 }
 

@@ -131,8 +131,9 @@ Be straight about the gaps - the guide will check them anyway:
 - **The entropy coder is still the baseline PackBits-style coder.** The
   interface is in place, so swapping in Huffman or rANS does not touch the
   compressor. This is why text compresses only slightly.
-- **Per-block checksums use CRC-32 (Day 11).** File/archive SHA-256 and the
-  integrity footer remain pending (Issue #41).
+- **Integrity uses CRC-32 per block and SHA-256 per file and archive (Days
+  11-12).** The archive ends with the SAD integrity footer; corrupt blocks,
+  digests and footers are rejected.
 - **Multi-file and directory archives are not supported yet.** The reader
   currently handles one file per archive.
 - **The HTTP API and job manager are not implemented.** The frontend runs on

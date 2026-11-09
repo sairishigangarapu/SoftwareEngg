@@ -12,6 +12,10 @@ constexpr std::uint16_t UATC_VERSION = 1;
 constexpr std::uint16_t UATC_ARCHIVE_HEADER_SIZE = 40;
 constexpr std::uint32_t UATC_FILE_RECORD_SIZE = 32;
 constexpr std::uint32_t UATC_BLOCK_RECORD_SIZE = 40;
+constexpr std::uint64_t UATC_SHA256_SIZE = 32;
+constexpr std::uint64_t UATC_ARCHIVE_FOOTER_SIZE = 12;
+constexpr std::uint64_t UATC_INTEGRITY_REGION_SIZE =
+    2 * UATC_SHA256_SIZE + UATC_ARCHIVE_FOOTER_SIZE;
 
 enum class TransformId : std::uint8_t {
     None = 0,
