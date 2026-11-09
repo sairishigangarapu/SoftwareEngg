@@ -4,7 +4,7 @@
 #include <exception>
 
 #include "archive/archive_inspector.hpp"
-#include "archive/archive_reader.hpp"
+#include "archive/multi_file.hpp"
 
 namespace uatc {
 
@@ -20,9 +20,8 @@ VerificationResult ArchiveVerifier::verify(
         result.filesChecked = info.fileCount;
         result.blocksChecked = info.blockCount;
 
-        // Reading reconstructs the original bytes and validates each
-        // block's decoded length and checksum.
-        (void)ArchiveReader::read(archive_path);
+        // Reading validates every file, block checksum and integrity digest.
+        (void)MultiFileArchiveReader::read(archive_path);
 
         result.success = true;
         result.message = "Archive verification successful.";

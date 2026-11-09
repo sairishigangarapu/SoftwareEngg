@@ -17,6 +17,7 @@ add_library(uatc_core
     src/archive/archive_binary.cpp
     src/archive/archive_reader.cpp
     src/archive/archive_writer.cpp
+    src/archive/multi_file.cpp
     src/archive/block.cpp
     src/archive/codec.cpp
     src/archive/transforms.cpp
@@ -196,6 +197,10 @@ if(BUILD_TESTING)
     add_executable(core_integrity_test tests/core/integrity_test.cpp)
     target_link_libraries(core_integrity_test PRIVATE uatc_core)
     add_test(NAME core_integrity_tests COMMAND core_integrity_test)
+
+    add_executable(core_multi_file_test tests/core/multi_file_test.cpp)
+    target_link_libraries(core_multi_file_test PRIVATE uatc_core)
+    add_test(NAME core_multi_file_tests COMMAND core_multi_file_test)
 
     # End-to-end round-trip test
     add_executable(integration_roundtrip_test

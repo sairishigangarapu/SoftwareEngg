@@ -134,8 +134,12 @@ Be straight about the gaps - the guide will check them anyway:
 - **Integrity uses CRC-32 per block and SHA-256 per file and archive (Days
   11-12).** The archive ends with the SAD integrity footer; corrupt blocks,
   digests and footers are rejected.
-- **Multi-file and directory archives are not supported yet.** The reader
-  currently handles one file per archive.
+- **The archive layer supports multi-file and directory archives (Day 20).**
+  Its file-set API deterministically records nested relative paths and
+  validates every block and digest before extraction. The CLI has not yet
+  been connected to that API on this branch; command integration is owned by
+  the CLI contributor. Version 1 has no directory-only records, so empty
+  subdirectories are not retained.
 - **The HTTP API and job manager are not implemented.** The frontend runs on
   mock data.
 

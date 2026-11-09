@@ -22,6 +22,13 @@ struct CodecUsage {
     std::uint64_t blocks = 0;
 };
 
+struct ArchiveFileInfo {
+    std::uint32_t fileId = 0;
+    std::string relativePath;
+    std::uint64_t originalBytes = 0;
+    std::uint64_t blockCount = 0;
+};
+
 struct ArchiveInfo {
     std::filesystem::path path;
 
@@ -39,6 +46,7 @@ struct ArchiveInfo {
 
     std::vector<TransformUsage> transformUsage;
     std::vector<CodecUsage> codecUsage;
+    std::vector<ArchiveFileInfo> files;
 };
 
 class ArchiveInspector {

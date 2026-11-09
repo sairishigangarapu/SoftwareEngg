@@ -104,7 +104,7 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 
 ---
 
-# 5. `src/archive/` — archive layer implementations (8)
+# 5. `src/archive/` — archive layer implementations (10)
 
 | File | What it does |
 |---|---|
@@ -114,9 +114,10 @@ Dependency rule: `core → archive → filesystem`. The core never depends on th
 | **transforms.cpp** | Now a thin adapter: `Transform::encode` and `decode` look the transform up through `core::make_transform(id)` and delegate. One implementation per transform, shared by the core and the archive layer. |
 | **archive_writer.cpp** | Builds the archive. For each block it computes the CRC-32 (IEEE 802.3) checksum of the **original** bytes, applies the transform, then the codec. It writes the header, file record, path, block index and payloads, followed by a fixed integrity region: the reconstructed file's SHA-256, SHA-256 of all preceding archive bytes, and the footer (header offset and magic). Existing file/block records and archive version remain unchanged. |
 | **archive_reader.cpp** | The security-critical file. It validates the fixed integrity footer and bounds all structural regions and payloads before decoding. Each decoded block is length-checked and CRC-32 verified before append; the reconstructed file is then checked against its stored SHA-256, and the archive prefix against its archive SHA-256. `read()` delegates to `read_file()`. |
+| **multi_file.cpp** | `MultiFileArchiveWriter` writes one deterministic archive for an ordered file set or a recursively enumerated directory. `MultiFileArchiveReader` validates file/block ownership, path and payload bounds, per-block CRC-32, the concatenated file SHA-256, and the archive-prefix SHA-256. Extraction validates the whole archive before writing, rejects unsafe paths and existing-file collisions, and removes outputs it created if writing fails. Empty input directories produce valid zero-file archives. Version 1 has file records only, so empty subdirectories with no files are not represented. |
 | **sha256.cpp** | Implements FIPS 180-4 SHA-256 with one-shot, incremental, hex-formatting and bounded file-prefix hashing APIs. The archive writer uses incremental hashing for file contents and streams the archive prefix to avoid loading a second archive-sized buffer. |
-| **archive_inspector.cpp** | `transform_name()` now pulls the name from the core factory, and `is_known_transform()` checks the core's candidate list. `inspect()` reads the header, file record and block index **only** — it never decodes payloads — and tallies stored versus compressed blocks and the per-transform and per-codec usage. |
-| **archive_verifier.cpp** | 37 lines. `verify()` calls the inspector for the counts and then `ArchiveReader::read()` to force full decoding and checksum validation. It catches everything and returns it as a `VerificationResult`; it never throws. |
+| **archive_inspector.cpp** | `transform_name()` now pulls the name from the core factory, and `is_known_transform()` checks the core's candidate list. `inspect()` reads the header, every file record and the block index **only** — it never decodes payloads — and reports each file's path, size and block count alongside stored/compressed and transform/codec usage. |
+| **archive_verifier.cpp** | `verify()` gets the counts from the inspector, then uses `MultiFileArchiveReader` to validate all files, block checksums and integrity digests. It catches errors and returns them as a `VerificationResult`; it never throws. |
 
 ---
 
@@ -290,6 +291,6 @@ The probe originally used a one-byte margin on its size estimate. On random data
   reader rejects damaged or truncated footers and digest mismatches. A
   missing integrity region is malformed; archive version 1 records are not
   changed.
-- **One file per archive.** The reader rejects any archive with a file count other than one; multi-file and directory archives are not implemented yet.
+- **Multi-file archive library support.** The archive layer can write and read file sets and recursively enumerated directories. The CLI has not yet been wired to this API; that command integration belongs to its owner.
 - **The HTTP API and the job manager are not built.** The frontend runs on mock data, and the contract it targets is written down in `docs/api-contract.md`.
 - **No `Jenkinsfile` or `Dockerfile`**, both of which the course tooling list requires.
