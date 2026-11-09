@@ -22,6 +22,7 @@ CORE_SRCS = \
 	src/core/compressor.cpp \
 	src/core/error.cpp \
 	src/core/planner.cpp \
+	src/core/crc32.cpp \
 	src/archive/archive_binary.cpp \
 	src/archive/archive_reader.cpp \
 	src/archive/archive_writer.cpp \
@@ -47,7 +48,8 @@ CORE_TESTS = \
 	tests/core/selector_test \
 	tests/core/archive_integration_test \
 	tests/core/compressor_test \
-	tests/core/planner_test
+	tests/core/planner_test \
+	tests/core/crc32_test
 
 CHAKSHU_TESTS = \
 	tests/filesystem_test \
@@ -116,6 +118,9 @@ tests/core/compressor_test: tests/core/compressor_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 tests/core/planner_test: tests/core/planner_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
+
+tests/core/crc32_test: tests/core/crc32_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Chakshu's tests ----

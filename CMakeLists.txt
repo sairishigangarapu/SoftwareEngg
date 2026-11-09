@@ -37,6 +37,7 @@ add_library(uatc_core
     src/core/compressor.cpp
     src/core/error.cpp
     src/core/planner.cpp
+    src/core/crc32.cpp
 
     src/archive/archive_inspector.cpp
     src/archive/archive_verifier.cpp
@@ -183,6 +184,10 @@ if(BUILD_TESTING)
     add_executable(core_planner_test tests/core/planner_test.cpp)
     target_link_libraries(core_planner_test PRIVATE uatc_core)
     add_test(NAME core_planner_tests COMMAND core_planner_test)
+
+    add_executable(core_crc32_test tests/core/crc32_test.cpp)
+    target_link_libraries(core_crc32_test PRIVATE uatc_core)
+    add_test(NAME core_crc32_tests COMMAND core_crc32_test)
 
     # End-to-end round-trip test
     add_executable(integration_roundtrip_test
