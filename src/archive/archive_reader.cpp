@@ -2,10 +2,11 @@
 #include "archive/archive_reader.hpp"
 
 #include <algorithm>
-#include <cstdint>
+#include <future>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "archive/archive_binary.hpp"
@@ -17,31 +18,21 @@
 #include "core/transform_factory.hpp"
 
 namespace uatc {
-
 namespace {
 
-constexpr std::uint64_t HEADER_SIZE =
-    UATC_ARCHIVE_HEADER_SIZE;
-
-constexpr std::uint64_t FILE_RECORD_SIZE =
-    UATC_FILE_RECORD_SIZE;
-
-constexpr std::uint64_t BLOCK_RECORD_SIZE =
-    UATC_BLOCK_RECORD_SIZE;
+constexpr std::uint64_t HEADER_SIZE = UATC_ARCHIVE_HEADER_SIZE;
+constexpr std::uint64_t FILE_RECORD_SIZE = UATC_FILE_RECORD_SIZE;
+constexpr std::uint64_t BLOCK_RECORD_SIZE = UATC_BLOCK_RECORD_SIZE;
 constexpr std::uint64_t FILE_SHA256_OFFSET = 0;
 constexpr std::uint64_t ARCHIVE_SHA256_OFFSET = UATC_SHA256_SIZE;
 
-// CRC-32/ISO-HDLC checksum of the original block data.
 std::uint32_t calculate_checksum(
     const std::vector<std::uint8_t>& data
 ) {
     return core::crc32(data.data(), data.size());
 }
 
-std::uint64_t checked_add(
-    std::uint64_t a,
-    std::uint64_t b
-) {
+std::uint64_t checked_add(std::uint64_t a, std::uint64_t b) {
     if (b > std::numeric_limits<std::uint64_t>::max() - a) {
         throw std::runtime_error("Archive offset overflow.");
     }
@@ -49,10 +40,7 @@ std::uint64_t checked_add(
     return a + b;
 }
 
-std::uint64_t checked_multiply(
-    std::uint64_t a,
-    std::uint64_t b
-) {
+std::uint64_t checked_multiply(std::uint64_t a, std::uint64_t b) {
     if (a != 0 &&
         b > std::numeric_limits<std::uint64_t>::max() / a) {
         throw std::runtime_error("Archive size overflow.");
@@ -61,11 +49,59 @@ std::uint64_t checked_multiply(
     return a * b;
 }
 
+struct BlockMetadata {
+    std::uint32_t block_id;
+    std::uint64_t payload_offset;
+    std::uint64_t original_length;
+    std::uint64_t stored_length;
+    TransformId transform_id;
+    CodecId codec_id;
+    std::uint16_t transform_parameter;
+    std::uint32_t checksum;
+};
+
+std::vector<std::uint8_t> decode_block(
+    const std::filesystem::path& archive_path,
+    const BlockMetadata& block
+) {
+    // Every task owns its own reader. No file stream is shared between threads.
+    BinaryReader reader(archive_path);
+    reader.seekg(block.payload_offset);
+
+    const auto stored_data = reader.read_bytes(
+        static_cast<std::size_t>(block.stored_length)
+    );
+
+    std::vector<std::uint8_t> decoded;
+
+    if (block.transform_id == TransformId::None &&
+        block.codec_id == CodecId::None) {
+        decoded = stored_data;
+    } else {
+        decoded = Codec::decode(stored_data, block.codec_id);
+        decoded = Transform::decode(decoded, block.transform_id);
+    }
+
+    if (decoded.size() != block.original_length) {
+        throw std::runtime_error(
+            "Decoded block length does not match metadata."
+        );
+    }
+
+    if (calculate_checksum(decoded) != block.checksum) {
+        throw core::UatcError(
+            core::ErrorCode::BlockChecksum,
+            "Block checksum mismatch at block " +
+                std::to_string(block.block_id) + "."
+        );
+    }
+
+    return decoded;
+}
+
 } // namespace
 
-void ArchiveReader::validate_header(
-    const ArchiveHeader& header
-) {
+void ArchiveReader::validate_header(const ArchiveHeader& header) {
     if (header.magic != UATC_MAGIC) {
         throw std::runtime_error("Invalid UATC archive magic.");
     }
@@ -114,16 +150,15 @@ void ArchiveReader::validate_block(
         throw std::runtime_error("Invalid block ID.");
     }
 
-    // Accept every transform the compression core registers, so the archive
-    // layer stays in step with the candidate set without being rewritten
-    // each time a transform is added.
     bool known_transform = false;
+
     for (TransformId candidate : core::candidate_transform_ids()) {
         if (transform_id == candidate) {
             known_transform = true;
             break;
         }
     }
+
     if (!known_transform) {
         throw std::runtime_error("Unsupported transform.");
     }
@@ -133,11 +168,8 @@ void ArchiveReader::validate_block(
         throw std::runtime_error("Unsupported codec.");
     }
 
-    // Every v1 transform defines no parameters.
     if (transform_parameter != 0) {
-        throw std::runtime_error(
-            "Unsupported transform parameter."
-        );
+        throw std::runtime_error("Unsupported transform parameter.");
     }
 
     if (transform_id == TransformId::None &&
@@ -150,8 +182,13 @@ void ArchiveReader::validate_block(
 }
 
 ArchivedFile ArchiveReader::read_file(
-    const std::filesystem::path& archive_path
+    const std::filesystem::path& archive_path,
+    std::size_t worker_count
 ) {
+    if (worker_count == 0) {
+        throw std::invalid_argument("Worker count must be greater than zero.");
+    }
+
     if (!std::filesystem::exists(archive_path)) {
         throw std::runtime_error(
             "Archive does not exist: " + archive_path.string()
@@ -160,8 +197,7 @@ ArchivedFile ArchiveReader::read_file(
 
     if (!std::filesystem::is_regular_file(archive_path)) {
         throw std::runtime_error(
-            "Archive path is not a regular file: " +
-            archive_path.string()
+            "Archive path is not a regular file: " + archive_path.string()
         );
     }
 
@@ -212,9 +248,7 @@ ArchivedFile ArchiveReader::read_file(
         checked_add(header.file_table_offset, FILE_RECORD_SIZE);
 
     if (file_table_end > data_region_size) {
-        throw std::runtime_error(
-            "File table extends beyond archive."
-        );
+        throw std::runtime_error("File table extends beyond archive.");
     }
 
     reader.seekg(header.file_table_offset);
@@ -238,8 +272,7 @@ ArchivedFile ArchiveReader::read_file(
         throw std::runtime_error("File/block count mismatch.");
     }
 
-    const std::uint64_t path_end =
-        checked_add(path_offset, path_length);
+    const std::uint64_t path_end = checked_add(path_offset, path_length);
 
     if (path_offset < file_table_end ||
         path_end > data_region_size ||
@@ -250,45 +283,27 @@ ArchivedFile ArchiveReader::read_file(
     }
 
     reader.seekg(path_offset);
-
     const std::string path = reader.read_string(path_length);
 
     if (path.empty()) {
-        throw std::runtime_error(
-            "Archive contains an empty file path."
-        );
+        throw std::runtime_error("Archive contains an empty file path.");
     }
 
-    const std::uint64_t block_index_size =
+    const std::uint64_t index_size =
         checked_multiply(header.block_count, BLOCK_RECORD_SIZE);
 
-    const std::uint64_t block_index_end =
-        checked_add(header.block_index_offset, block_index_size);
+    const std::uint64_t index_end =
+        checked_add(header.block_index_offset, index_size);
 
-    if (block_index_end > archive_size) {
-        throw std::runtime_error(
-            "Block index extends beyond archive."
-        );
+    if (index_end > data_region_size) {
+        throw std::runtime_error("Block index extends beyond archive.");
     }
 
-    if (header.payload_offset < block_index_end) {
-        throw std::runtime_error(
-            "Payload overlaps the block index."
-        );
+    if (header.payload_offset < index_end) {
+        throw std::runtime_error("Payload overlaps the block index.");
     }
 
     reader.seekg(header.block_index_offset);
-
-    struct BlockMetadata {
-        std::uint32_t block_id;
-        std::uint64_t payload_offset;
-        std::uint64_t original_length;
-        std::uint64_t stored_length;
-        TransformId transform_id;
-        CodecId codec_id;
-        std::uint16_t transform_parameter;
-        std::uint32_t checksum;
-    };
 
     std::vector<BlockMetadata> metadata;
     metadata.reserve(header.block_count);
@@ -306,15 +321,11 @@ ArchivedFile ArchiveReader::read_file(
         const auto codec_id =
             static_cast<CodecId>(reader.read_u8());
 
-        const std::uint16_t transform_parameter =
-            reader.read_u16();
-
+        const std::uint16_t transform_parameter = reader.read_u16();
         const std::uint32_t checksum = reader.read_u32();
 
         if (block_id != i) {
-            throw std::runtime_error(
-                "Block IDs are not sequential."
-            );
+            throw std::runtime_error("Block IDs are not sequential.");
         }
 
         validate_block(
@@ -368,58 +379,41 @@ ArchivedFile ArchiveReader::read_file(
 
     result.reserve(static_cast<std::size_t>(original_size));
 
-    for (const auto& block : metadata) {
-        reader.seekg(block.payload_offset);
+    // Decode a bounded batch concurrently. Futures are collected in metadata
+    // order, so the reconstructed file always has the original byte order.
+    const std::size_t workers = std::min(
+        worker_count,
+        std::max<std::size_t>(metadata.size(), 1)
+    );
 
-        const auto stored_data =
-            reader.read_bytes(
-                static_cast<std::size_t>(block.stored_length)
-            );
+    for (std::size_t begin = 0; begin < metadata.size(); begin += workers) {
+        const std::size_t end = std::min(begin + workers, metadata.size());
 
-        // Raw blocks need no transform or codec decoding.
-        std::vector<std::uint8_t> decoded;
+        std::vector<std::future<std::vector<std::uint8_t>>> futures;
+        futures.reserve(end - begin);
 
-        if (block.transform_id == TransformId::None &&
-            block.codec_id == CodecId::None) {
-            decoded = stored_data;
-        } else {
-            decoded = Codec::decode(
-                stored_data,
-                block.codec_id
-            );
+        for (std::size_t i = begin; i < end; ++i) {
+            const BlockMetadata block = metadata[i];
 
-            decoded = Transform::decode(
-                decoded,
-                block.transform_id
-            );
+            futures.emplace_back(std::async(
+                std::launch::async,
+                [archive_path, block]() {
+                    return decode_block(archive_path, block);
+                }
+            ));
         }
 
-        if (decoded.size() != block.original_length) {
-            throw std::runtime_error(
-                "Decoded block length does not match metadata."
-            );
-        }
+        for (auto& future : futures) {
+            auto decoded = future.get();
 
-        // Checksum is calculated over the reconstructed original bytes.
-        if (calculate_checksum(decoded) != block.checksum) {
-            throw core::UatcError(
-                core::ErrorCode::BlockChecksum,
-                "Block checksum mismatch at block " +
-                    std::to_string(block.block_id) + "."
-            );
-        }
+            if (decoded.size() > result.max_size() - result.size()) {
+                throw std::runtime_error(
+                    "Reconstructed file exceeds supported size limits."
+                );
+            }
 
-        if (decoded.size() > result.max_size() - result.size()) {
-            throw std::runtime_error(
-                "Reconstructed file exceeds supported size limits."
-            );
+            result.insert(result.end(), decoded.begin(), decoded.end());
         }
-
-        result.insert(
-            result.end(),
-            decoded.begin(),
-            decoded.end()
-        );
     }
 
     if (result.size() != original_size) {
@@ -428,7 +422,10 @@ ArchivedFile ArchiveReader::read_file(
         );
     }
 
-    const auto file_digest = core::sha256(result.data(), result.size());
+    const auto file_digest = core::sha256(
+        result.data(),
+        result.size()
+    );
     reader.seekg(data_region_size + FILE_SHA256_OFFSET);
     const auto stored_file_digest = reader.read_bytes(
         static_cast<std::size_t>(UATC_SHA256_SIZE)
@@ -460,13 +457,15 @@ ArchivedFile ArchiveReader::read_file(
             "Archive SHA-256 mismatch."
         );
     }
+
     return ArchivedFile{path, std::move(result)};
 }
 
 std::vector<std::uint8_t> ArchiveReader::read(
-    const std::filesystem::path& archive_path
+    const std::filesystem::path& archive_path,
+    std::size_t worker_count
 ) {
-    return read_file(archive_path).data;
+    return read_file(archive_path, worker_count).data;
 }
 
-}  // namespace uatc
+} // namespace uatc

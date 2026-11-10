@@ -1,11 +1,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
-#include "archive/block.hpp"
 #include "archive/archive_format.hpp"
+#include "archive/block.hpp"
 
 namespace uatc {
 
@@ -14,9 +15,6 @@ struct BlockEncoding {
     CodecId codec_id = CodecId::None;
 };
 
-// A block that has already been transformed and entropy coded. Used when the
-// caller has done the encoding itself, so it can report progress and sizes
-// before the archive is written.
 struct CodedBlock {
     TransformId transform_id = TransformId::None;
     CodecId codec_id = CodecId::None;
@@ -31,7 +29,6 @@ public:
         const std::vector<Block>& blocks
     );
 
-    // Encode every block with the same transform and codec.
     static void write(
         const std::filesystem::path& archive_path,
         const std::filesystem::path& source_file,
@@ -40,7 +37,6 @@ public:
         CodecId codec_id
     );
 
-    // Encode each block using its own transform and codec.
     static void write(
         const std::filesystem::path& archive_path,
         const std::filesystem::path& source_file,
@@ -48,7 +44,6 @@ public:
         const std::vector<BlockEncoding>& encodings
     );
 
-    // Write blocks whose payloads have already been transformed and coded.
     static void write(
         const std::filesystem::path& archive_path,
         const std::filesystem::path& source_file,
@@ -57,4 +52,4 @@ public:
     );
 };
 
-}
+}  // namespace uatc

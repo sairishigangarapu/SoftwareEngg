@@ -1,6 +1,6 @@
-
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -10,7 +10,6 @@
 
 namespace uatc {
 
-// A file recovered from an archive: its recorded relative path and contents.
 struct ArchivedFile {
     std::string relative_path;
     std::vector<std::uint8_t> data;
@@ -19,19 +18,17 @@ struct ArchivedFile {
 class ArchiveReader {
 public:
     static std::vector<std::uint8_t> read(
-        const std::filesystem::path& archive_path
+        const std::filesystem::path& archive_path,
+        std::size_t worker_count = 1
     );
 
-    // Reads the archive and also reports the relative path it recorded for
-    // the file, so the caller can restore it under the original name.
     static ArchivedFile read_file(
-        const std::filesystem::path& archive_path
+        const std::filesystem::path& archive_path,
+        std::size_t worker_count = 1
     );
 
 private:
-    static void validate_header(
-        const ArchiveHeader& header
-    );
+    static void validate_header(const ArchiveHeader& header);
 
     static void validate_block(
         std::uint32_t block_id,

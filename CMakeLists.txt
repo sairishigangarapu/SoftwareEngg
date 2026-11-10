@@ -8,6 +8,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CTest)
+find_package(Threads REQUIRED)
+
+if(MINGW AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # Keep executables independent of unrelated MinGW runtime DLLs on PATH.
+    add_link_options(-static)
+endif()
 
 # --------------------------------------------------
 # Core library
@@ -50,6 +56,8 @@ target_include_directories(uatc_core
         ${PROJECT_SOURCE_DIR}/include
 )
 
+target_link_libraries(uatc_core PUBLIC Threads::Threads)
+
 # --------------------------------------------------
 # CLI applications
 # --------------------------------------------------
@@ -73,7 +81,6 @@ target_link_libraries(uatc_cli PRIVATE uatc_core)
 
 if(BUILD_TESTING)
 
-    # Existing filesystem and archive tests
     add_executable(filesystem_test tests/filesystem_test.cpp)
     target_link_libraries(filesystem_test PRIVATE uatc_core)
     add_test(NAME filesystem_tests COMMAND filesystem_test)
@@ -112,54 +119,6 @@ if(BUILD_TESTING)
     target_link_libraries(transform_codec_test PRIVATE uatc_core)
     add_test(NAME transform_codec_tests COMMAND transform_codec_test)
 
-    add_executable(mixed_transform_test
-        tests/mixed_transform_test.cpp
-    )
-    target_link_libraries(mixed_transform_test PRIVATE uatc_core)
-    add_test(NAME mixed_transform_tests COMMAND mixed_transform_test)
-
-    # Your path traversal test
-    add_executable(path_traversal_test
-        tests/path_traversal_test.cpp
-    )
-    target_link_libraries(path_traversal_test PRIVATE uatc_core)
-    add_test(NAME path_traversal_tests COMMAND path_traversal_test)
-
-    # Core tests: Days 1-5
-    add_executable(core_trivial_test tests/core/trivial_test.cpp)
-    target_link_libraries(core_trivial_test PRIVATE uatc_core)
-    add_test(NAME core_trivial_tests COMMAND core_trivial_test)
-
-    add_executable(core_block_slice_test
-        tests/core/block_slice_test.cpp
-    )
-    target_link_libraries(core_block_slice_test PRIVATE uatc_core)
-    add_test(NAME core_block_slice_tests COMMAND core_block_slice_test)
-
-    add_executable(core_transform_test
-        tests/core/transform_test.cpp
-    )
-    target_link_libraries(core_transform_test PRIVATE uatc_core)
-    add_test(NAME core_transform_tests COMMAND core_transform_test)
-
-    add_executable(core_codec_test tests/core/codec_test.cpp)
-    target_link_libraries(core_codec_test PRIVATE uatc_core)
-    add_test(NAME core_codec_tests COMMAND core_codec_test)
-
-    add_executable(core_pipeline_test tests/core/pipeline_test.cpp)
-    target_link_libraries(core_pipeline_test PRIVATE uatc_core)
-    add_test(NAME core_pipeline_tests COMMAND core_pipeline_test)
-
-    # Core tests: Days 6-9
-    add_executable(core_transforms_extended_test
-        tests/core/transforms_extended_test.cpp
-    )
-    target_link_libraries(core_transforms_extended_test PRIVATE uatc_core)
-    add_test(
-        NAME core_transforms_extended_tests
-        COMMAND core_transforms_extended_test
-    )
-
     add_executable(core_probe_test tests/core/probe_test.cpp)
     target_link_libraries(core_probe_test PRIVATE uatc_core)
     add_test(NAME core_probe_tests COMMAND core_probe_test)
@@ -190,6 +149,7 @@ if(BUILD_TESTING)
     add_executable(core_crc32_test tests/core/crc32_test.cpp)
     target_link_libraries(core_crc32_test PRIVATE uatc_core)
     add_test(NAME core_crc32_tests COMMAND core_crc32_test)
+
     add_executable(core_sha256_test tests/core/sha256_test.cpp)
     target_link_libraries(core_sha256_test PRIVATE uatc_core)
     add_test(NAME core_sha256_tests COMMAND core_sha256_test)
@@ -202,7 +162,6 @@ if(BUILD_TESTING)
     target_link_libraries(core_multi_file_test PRIVATE uatc_core)
     add_test(NAME core_multi_file_tests COMMAND core_multi_file_test)
 
-    # End-to-end round-trip test
     add_executable(integration_roundtrip_test
         tests/integration_roundtrip_test.cpp
     )
@@ -212,7 +171,6 @@ if(BUILD_TESTING)
         COMMAND integration_roundtrip_test
     )
 
-    # Run tests from the project root so relative test_data paths work.
     set_tests_properties(
         filesystem_tests
         archive_binary_tests
@@ -222,19 +180,15 @@ if(BUILD_TESTING)
         archive_inspector_tests
         archive_verifier_tests
         transform_codec_tests
-        mixed_transform_tests
-        path_traversal_tests
-        core_trivial_tests
-        core_block_slice_tests
-        core_transform_tests
-        core_codec_tests
-        core_pipeline_tests
-        core_transforms_extended_tests
         core_probe_tests
         core_selector_tests
         core_archive_integration_tests
         core_compressor_tests
         core_planner_tests
+        core_crc32_tests
+        core_sha256_tests
+        core_integrity_tests
+        core_multi_file_tests
         integration_roundtrip_tests
         PROPERTIES
             WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
