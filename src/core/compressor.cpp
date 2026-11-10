@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <stdexcept>
+#include <system_error>
 
 #include "archive/archive_reader.hpp"
 #include "archive/archive_writer.hpp"
@@ -14,6 +15,7 @@
 #include "core/transform_factory.hpp"
 #include "core/transform_selector.hpp"
 #include "filesystem/file_reader.hpp"
+#include "filesystem/safe_path.hpp"
 
 namespace uatc::core {
 
@@ -110,18 +112,58 @@ ExtractResult CompressionManager::extract(
 
     const auto file = ArchiveReader::read_file(archive);
 
-    // The recorded path must stay inside the destination directory: reject
-    // absolute paths and any '..' segment (E_PATH_TRAVERSAL).
     const std::filesystem::path relative(file.relative_path);
-    if (relative.is_absolute() ||
-        relative.string().find("..") != std::string::npos) {
-        throw UatcError(ErrorCode::PathTraversal,
-                        "The archive contains an unsafe file path: " +
-                            file.relative_path);
+    std::filesystem::path destination;
+    try {
+        destination = safe_destination(outputDirectory, relative);
+    } catch (const std::runtime_error& error) {
+        throw UatcError(
+            ErrorCode::PathTraversal,
+            "The archive contains an unsafe file path: " + file.relative_path +
+                " (" + error.what() + ")"
+        );
+    }
+
+    const auto root = std::filesystem::absolute(outputDirectory)
+                          .lexically_normal();
+    const auto reject_symlink = [](const std::filesystem::path& path) {
+        std::error_code error;
+        const auto status = std::filesystem::symlink_status(path, error);
+        if (error) {
+            if (error == std::errc::no_such_file_or_directory) {
+                return;
+            }
+            throw UatcError(
+                ErrorCode::Io,
+                "Cannot inspect extraction path: " + path.string() +
+                    " (" + error.message() + ")"
+            );
+        }
+        if (status.type() == std::filesystem::file_type::not_found) {
+            return;
+        }
+        if (std::filesystem::is_symlink(status)) {
+            throw UatcError(
+                ErrorCode::PathTraversal,
+                "The extraction path contains a symbolic link: " +
+                    path.string()
+            );
+        }
+    };
+
+    auto current = root.root_path();
+    for (const auto& component : root.relative_path()) {
+        current /= component;
+        reject_symlink(current);
+    }
+    current = root;
+    const auto resolved_relative = destination.lexically_relative(root);
+    for (const auto& component : resolved_relative) {
+        current /= component;
+        reject_symlink(current);
     }
 
     std::filesystem::create_directories(outputDirectory);
-    const auto destination = outputDirectory / relative;
     if (destination.has_parent_path()) {
         std::filesystem::create_directories(destination.parent_path());
     }

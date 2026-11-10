@@ -30,7 +30,10 @@ int main() {
             "..",
             ".",
             fs::path("/outside.txt"),
-            fs::path("C:/outside.txt")
+            fs::path("C:/outside.txt"),
+            fs::path("\\\\server\\share\\outside.txt"),
+            fs::path("subfolder\\..\\outside.txt"),
+            fs::path("")
         };
 
         for (const auto& unsafe_path : unsafe_paths) {
@@ -56,6 +59,14 @@ int main() {
         if (simple.filename() != "hello.txt") {
             throw std::runtime_error(
                 "A valid filename was not preserved."
+            );
+        }
+
+        const fs::path dotted_name =
+            uatc::safe_destination(root, "subfolder/a..b.txt");
+        if (dotted_name.filename() != "a..b.txt") {
+            throw std::runtime_error(
+                "A valid filename containing adjacent dots was rejected."
             );
         }
 

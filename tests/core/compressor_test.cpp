@@ -4,12 +4,14 @@
  // Covers compression, archive inspection and verification, byte-for-byte
  // extraction, corruption handling, incompressible data, and error codes.
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,7 @@
 #include "archive/archive_verifier.hpp"
 #include "core/compressor.hpp"
 #include "core/error.hpp"
+#include "core/sha256.hpp"
 
 namespace fs = std::filesystem;
 
@@ -36,6 +39,44 @@ std::vector<std::uint8_t> read_file(const fs::path& p) {
     return std::vector<std::uint8_t>(
         std::istreambuf_iterator<char>(in),
         std::istreambuf_iterator<char>());
+}
+
+void require(bool condition, const char* message) {
+    if (!condition) {
+        throw std::runtime_error(message);
+    }
+}
+
+void replace_path_and_rehash(
+    const fs::path& archive,
+    const std::string& original_path,
+    const std::string& replacement_path
+) {
+    require(original_path.size() == replacement_path.size(),
+            "replacement archive path has a different size");
+    auto bytes = read_file(archive);
+    const std::vector<std::uint8_t> original(
+        original_path.begin(), original_path.end());
+    const auto found = std::search(bytes.begin(), bytes.end(),
+                                   original.begin(), original.end());
+    require(found != bytes.end(), "archive path was not found");
+    std::copy(replacement_path.begin(), replacement_path.end(), found);
+
+    constexpr std::size_t integrity_region_size = 32 + 32 + 12;
+    require(bytes.size() >= integrity_region_size,
+            "archive is too short to contain its integrity footer");
+    const auto integrity_offset = bytes.size() - integrity_region_size;
+    const auto archive_digest_offset = integrity_offset + 32;
+    const auto digest = uatc::core::sha256(bytes.data(), integrity_offset);
+    std::copy(digest.begin(), digest.end(),
+              bytes.begin() +
+                  static_cast<std::ptrdiff_t>(archive_digest_offset));
+
+    std::ofstream out(archive, std::ios::binary | std::ios::trunc);
+    require(static_cast<bool>(out), "could not rewrite test archive");
+    out.write(reinterpret_cast<const char*>(bytes.data()),
+              static_cast<std::streamsize>(bytes.size()));
+    require(static_cast<bool>(out), "could not finish rewriting test archive");
 }
 
 // Corrupt a byte in the archive payload using the block-index offset.
@@ -189,6 +230,82 @@ int main() {
         assert(extracted.bytesWritten == original.size());
         assert(extracted.relativePath == "mixed.bin");
         assert(read_file(extracted.destination) == original);
+    }
+
+    // --- Unsafe paths and symlink targets are rejected before extraction ---
+    {
+        const auto safe_source = work / "safe.txt";
+        const auto safe_archive = work / "safe.uatc";
+        write_file(safe_source, {1, 2, 3});
+        CompressionManager::compress(safe_source, safe_archive, options);
+
+        const std::vector<std::string> unsafe_paths = {
+            "../x.txt",
+            "C:/x.txt"
+        };
+        for (std::size_t i = 0; i < unsafe_paths.size(); ++i) {
+            const auto unsafe_archive =
+                work / ("unsafe-path-" + std::to_string(i) + ".uatc");
+            fs::copy_file(safe_archive, unsafe_archive);
+            replace_path_and_rehash(
+                unsafe_archive, "safe.txt", unsafe_paths[i]);
+
+            const auto output = work / ("unsafe-output-" + std::to_string(i));
+            bool rejected = false;
+            try {
+                CompressionManager::extract(unsafe_archive, output);
+            } catch (const UatcError& error) {
+                rejected = true;
+                if (error.code() != ErrorCode::PathTraversal) {
+                    throw std::runtime_error(
+                        std::string("unsafe archive path returned ") +
+                        error_code_name(error.code()) + ": " + error.what()
+                    );
+                }
+            }
+            require(rejected, "unsafe archive path was accepted");
+            require(!fs::exists(output),
+                    "unsafe archive path created partial output");
+        }
+        require(!fs::exists(work / "x.txt"),
+                "traversal archive wrote outside the extraction root");
+
+        const auto dotted_archive = work / "dotted-name.uatc";
+        fs::copy_file(safe_archive, dotted_archive);
+        replace_path_and_rehash(dotted_archive, "safe.txt", "a..b.txt");
+        const auto dotted_output =
+            CompressionManager::extract(dotted_archive, work / "dotted-output");
+        require(dotted_output.destination.filename() == "a..b.txt",
+                "valid filename containing adjacent dots was rejected");
+        require(read_file(dotted_output.destination) ==
+                    std::vector<std::uint8_t>{1, 2, 3},
+                "valid dotted filename extraction changed file contents");
+
+        const auto outside = work / "outside.txt";
+        write_file(outside, {9, 8, 7});
+        const auto symlink_root = work / "symlink-output";
+        fs::create_directories(symlink_root);
+        std::error_code symlink_error;
+        fs::create_symlink(outside, symlink_root / "safe.txt", symlink_error);
+        if (!symlink_error) {
+            bool rejected = false;
+            try {
+                CompressionManager::extract(safe_archive, symlink_root);
+            } catch (const UatcError& error) {
+                rejected = true;
+                require(error.code() == ErrorCode::PathTraversal,
+                        "symlink extraction returned the wrong error code");
+            }
+            require(rejected, "extraction followed a symlink target");
+            require(read_file(outside) ==
+                        std::vector<std::uint8_t>{9, 8, 7},
+                    "symlink extraction modified the target");
+        } else {
+            std::printf(
+                "SKIPPED symlink extraction check: %s\n",
+                symlink_error.message().c_str()
+            );
+        }
     }
 
     // --- A corrupted archive is rejected without writing the output file ---
