@@ -1,111 +1,124 @@
-# SoftwareEngg — Universal Adaptive Transform Compression (UATC)
+# UATC - Universal Adaptive Transform Compression
 
-## Overview
+A block-adaptive, lossless file compression and archival tool in C++17,
+with a command-line interface and a browser-based frontend.
 
-**Universal Adaptive Transform Compression (UATC)** is a software engineering project focused on developing a lossless file compression and archival tool using C++17.
+Level 3 Software Engineering Mini Project (UE24CS341A), PES University.
+Guide: Dr. Sapna V M.
 
-The project aims to organize files into blocks, apply reversible transformations, and store data in a versioned archive format. The archive and file-system components are designed to support reliable file handling, data integrity, and eventual integration with the compression pipeline.
+## What it does
 
-## Objectives
+- Compresses a **file or a whole folder** into one `.uatc` archive and
+  extracts it back **byte for byte**.
+- Splits input into blocks and, **for each block**, picks the reversible
+  transform (None, Delta, XOR, Byte-shuffle, RLE) with the lowest estimated
+  cost before entropy coding (Huffman or a baseline coder).
+- **Stores** a block unchanged when compressing it would not make it
+  smaller, so already-compressed or random data is never inflated beyond
+  the archive's fixed metadata.
+- Processes independent blocks on a **thread pool**; the archive is
+  identical for any worker count.
+- Checks **integrity** with CRC32 per block and SHA-256 per file and per
+  archive; every kind of damage is reported with its own error code.
+- Offers `info` and `verify` without extracting, and a local **web UI**
+  for non-technical users.
 
-- Develop a modular file compression and archival system.
-- Support file and directory handling.
-- Implement binary archive serialization and deserialization.
-- Split file data into manageable blocks.
-- Support data integrity checks and reliable archive reading.
-- Use automated tests to validate individual modules.
-- Apply software engineering practices such as modular design, version control, and build automation.
+UATC does not try to beat gzip or Zstandard; it is measured honestly
+against them (see `docs/validation-report.md`).
 
-## Technologies Used
+## Quick start
 
-- **C++17** — Core implementation
-- **CMake** — Build system
-- **CTest** — Test execution
-- **GoogleTest** — Unit testing
-- **Git and GitHub** — Version control and collaboration
-
-## Project Components
-
-The repository includes development work related to:
-
-- **File-system layer:** File and directory enumeration and reading.
-- **Archive binary format:** Binary serialization and deserialization of archive data.
-- **Block splitter:** Dividing file data into smaller blocks.
-- **Archive writer and reader:** Writing archive data and reading it back.
-- **Testing:** Automated tests for individual modules and archive operations.
-
-The complete compression pipeline and other planned components should be considered implemented only when their functionality has been completed and verified.
-
-## Repository Structure
-
-The repository is organized into C++ source files, header files, build configuration, and tests. The exact directory structure can be inspected in the repository.
-
-Typical components include:
-
-- `include/` — Header files and interfaces
-- `src/` — Implementation files
-- `tests/` — Automated test cases
-- `CMakeLists.txt` — CMake build configuration
-
-## Prerequisites
-
-Before building the project, install:
-
-- A C++17-compatible compiler
-- CMake
-- Git
-- GoogleTest, if required by the project's CMake configuration
-
-## Build Instructions
-
-Clone the repository:
+Requirements: a C++17 compiler (GCC or Clang), `make` (or CMake 3.16+),
+Python 3 for the scripts and UI tests.
 
 ```bash
-git clone <YOUR_REPOSITORY_URL>
-cd SoftwareEngg
+make all
+```
+```bash
+make test
 ```
 
-Configure the project:
+The CLI is built at `build/uatc_cli`:
 
 ```bash
-cmake -S . -B build
+build/uatc_cli compress ./project ./project.uatc --workers 4
+```
+```bash
+build/uatc_cli info ./project.uatc
+```
+```bash
+build/uatc_cli verify ./project.uatc
+```
+```bash
+build/uatc_cli extract ./project.uatc ./restored
 ```
 
-Build the project:
+All commands and options: `build/uatc_cli --help` and `docs/cli-spec.md`.
+
+### Web UI
 
 ```bash
-cmake --build build
+build/uatc_cli serve --root ~/Documents
 ```
 
-## Running Tests
+Open the address it prints (`http://127.0.0.1:8080/?live#token=...`). The
+server listens on 127.0.0.1 only, needs the printed session token, and can
+only see the folder given with `--root`. Without a backend, open
+`web/index.html` through any static server for a demo mode. Details:
+`web/README.md`.
 
-Run the configured test suite using CTest:
+## Testing and quality
 
-```bash
-ctest --test-dir build --output-on-failure
-```
+| What | Command | Result (latest run) |
+|---|---|---|
+| C++ unit and integration tests | `make test` | 32 suites pass |
+| Selenium UI tests | `pip install -r tests/ui/requirements.txt && make ui-test` | 17 pass |
+| Line and branch coverage | `make coverage` | core 91.0% lines, 81.1% branches |
+| System validation (corpus, damage, security, performance) | `scripts/system_validation.sh` | all checks pass |
+| Static analysis | SonarCloud quality gate on every PR | |
+| CI | `Jenkinsfile`: build, test, coverage, UI tests, SonarQube, benchmark, demo | |
 
-Review the test output to identify any failures before considering the current implementation verified.
+Reports: `docs/test-report.md` (unit results and coverage),
+`docs/validation-report.md` (every STP test case, performance, defects),
+`docs/rtm.md` (requirements traceability).
 
-## Development Workflow
+## Repository layout
 
-1. Create or switch to a development branch.
-2. Implement a module or feature.
-3. Build the project using CMake.
-4. Run the relevant tests.
-5. Commit the changes with a descriptive commit message.
-6. Push the branch to GitHub and submit a pull request when required.
+| Path | Contents |
+|---|---|
+| `include/`, `src/core/` | Compression core: block statistics, probe, transforms, selector, coders, thread pool, the compress/extract facade |
+| `src/archive/`, `src/filesystem/` | Archive format writer/reader (single file and folder), inspector, verifier, file enumeration |
+| `src/server/` | Local HTTP API and job manager used by the web UI |
+| `src/cli/` | The `uatc` command-line tool |
+| `web/` | Web frontend (HTML, CSS, vanilla JavaScript) |
+| `tests/` | C++ tests (`tests/`, `tests/core/`, `tests/server/`) and Selenium UI tests (`tests/ui/`) |
+| `scripts/` | Demo, coverage and system-validation scripts |
+| `pcomp/` | Benchmark harness and samples |
+| `docs/` | Specifications, contracts, reports, plans |
+| `UATC_SRS.pdf`, `UATC_SAD.pdf`, `UATC_STP.pdf` | Requirements, architecture and design, test plan |
 
-## Project Status
+## Documents
 
-The repository contains development work on the file-system and archive components, including binary serialization and block splitting.
+| Stage | Document |
+|---|---|
+| Requirements | `UATC_SRS.pdf` |
+| Architecture and design | `UATC_SAD.pdf`, `docs/core/pipeline.md`, `docs/api-contract.md`, `docs/wireframes.md` |
+| Planning | `docs/sprints/SPRINT_PLAN.md`, GitHub issues |
+| Testing | `UATC_STP.pdf`, `docs/test-report.md`, `docs/rtm.md` |
+| Validation and maintenance | `docs/validation-report.md`, `docs/maintenance-plan.md` |
+| Demo | `docs/demo-script.md`, `docs/DEMO.md`, `scripts/demo.sh` |
 
-Implementation and testing of the overall system are ongoing. Features should be marked complete only after their implementation and tests have been verified.
+## Team
 
-## Contributors
+| Member | Area | Requirements |
+|---|---|---|
+| Sai Rishi Gangarapu (Lead) | Compression core and adaptive transform engine | FR-04 to FR-07 |
+| S Chakshu | Archive and file-system layer | FR-01 to FR-03, FR-09 |
+| Sampada K | Execution, performance and benchmarking | FR-10, performance |
+| Manasa K | Inspection and verification, web frontend, API, QA | FR-11 to FR-15 |
 
-This project is developed collaboratively as part of Software Engineering coursework at PES University.
+## Contributing
 
-## License
-
-Refer to the repository's license file, if available, for the applicable usage and distribution terms.
+Work on a branch, open a pull request into `main`, and get the module
+owner's review; never push to `main` directly. The CI gates and the rules
+for the archive format are in `docs/maintenance-plan.md`.

@@ -21,8 +21,8 @@ section 14 (metrics), Appendix A (test cases).
 | Suite | Tests | Result |
 |---|---|---|
 | C++ unit and integration suites (`make test`) | 32 suites | all pass |
-| API suite (`tests/server/api_test.cpp`) | 80 checks | all pass; clean under ThreadSanitizer |
-| Folder-archive facade (`tests/core/archive_service_test.cpp`) | 22 checks | all pass |
+| API suite (`tests/server/api_test.cpp`) | 80 checks | all pass (one check, the read-only folder, runs only as a non-root user); clean under ThreadSanitizer |
+| Folder-archive facade (`tests/core/archive_service_test.cpp`) | 29 checks | all pass |
 | Selenium UI suite (`tests/ui/test_ui.py`) | 17 tests | all pass, 3 consecutive runs (no flakiness) |
 
 ## 3. Coverage (gcov + gcovr)
@@ -126,3 +126,6 @@ A note for test data: a file whose first four bytes are the text `UATC`
 matches the archive magic number, so Info/Verify treat it as an archive
 from an unknown version and report E_UNSUPPORTED_VERSION. This is correct
 behaviour; the UI test data avoids that prefix.
+
+Defects D-04 to D-06, found later by the system validation run, are in
+`docs/validation-report.md` section 5.
