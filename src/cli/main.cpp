@@ -212,14 +212,18 @@ void print_help() {
         << "  uatc info <archive.uatc>\n"
         << "  uatc verify <archive.uatc>\n"
         << "  uatc benchmark <dir> [--block-size BYTES] [--workers N]\n"
-        << "                   [--gzip] [--out FILE]\n\n"
+        << "                   [--gzip] [--out FILE]\n"
+        << "  uatc serve [--port N] [--root DIR] [--web DIR] [--allow-origin URL]\n\n"
         << "Commands:\n"
         << "  benchmark Runs the compressor over every file in a directory.\n"
         << "  stats    Analyse a file and report what the engine will do to it.\n"
         << "  compress  Compress a file into a .uatc archive.\n"
         << "  extract   Restore the contents of a .uatc archive.\n"
         << "  info      Display archive metadata without decoding payloads.\n"
-        << "  verify    Validate archive structure and payload integrity.\n\n"
+        << "  verify    Validate archive structure and payload integrity.\n"
+        << "  serve     Start the local HTTP API for the web frontend\n"
+        << "            (127.0.0.1 only; paths limited to --root, default the\n"
+        << "            current folder; prints a session token).\n\n"
         << "Options:\n"
         << "  --block-size BYTES   Block size to split the input into "
         << "(default 1 MiB).\n"
@@ -605,14 +609,22 @@ std::vector<std::uint8_t> read_file_bytes(const std::filesystem::path& path) {
         std::istreambuf_iterator<char>());
 }
 
-// The API server: `uatc serve [--port N]` starts the localhost control
-// plane and blocks until interrupted.
-int serve(std::uint16_t port) {
-    uatc::server::ApiServer server(port);
+// The API server: `uatc serve` starts the localhost control plane and
+// blocks until interrupted. It prints the session token once; every API
+// call except /api/health must carry it (SAD 3.9, TC-SEC-03).
+int serve(const uatc::server::ServerOptions& options) {
+    uatc::server::ApiServer server(options);
+    const std::string base =
+        "http://127.0.0.1:" + std::to_string(options.port);
     std::cout
-        << "UATC API server listening on http://127.0.0.1:" << port
-        << "  (Ctrl-C to stop)\n"
-        << "  open the frontend with:  web/index.html?live\n";
+        << "UATC API server listening on " << base << "  (Ctrl-C to stop)\n"
+        << "  allowed folder: " << server.allowed_root().string() << '\n'
+        << "  session token:  " << server.token() << '\n';
+    if (!options.web_root.empty()) {
+        std::cout << "  open the app:   " << base << "/?live#token="
+                  << server.token() << '\n';
+    }
+    std::cout << std::flush;
     server.serve_forever();
     return 0;
 }
@@ -625,6 +637,52 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // serve [--port N] [--root DIR] [--web DIR] [--allow-origin URL]...
+    if (argc >= 2 && std::string(argv[1]) == "serve") {
+        uatc::server::ServerOptions options;
+        options.web_root = "web";
+        try {
+            for (int i = 2; i < argc; ++i) {
+                const std::string option = argv[i];
+                if (i + 1 >= argc) {
+                    std::cerr << "error: E_INVALID_ARGUMENT: " << option
+                              << " needs a value.\n";
+                    return 2;
+                }
+                const std::string value = argv[++i];
+                if (option == "--port") {
+                    const auto port = std::stoul(value);
+                    if (port == 0 || port > 65535) {
+                        throw std::invalid_argument("port");
+                    }
+                    options.port = static_cast<std::uint16_t>(port);
+                } else if (option == "--root") {
+                    options.allowed_root = value;
+                } else if (option == "--web") {
+                    options.web_root = value;
+                } else if (option == "--allow-origin") {
+                    options.allowed_origins.push_back(value);
+                } else {
+                    std::cerr << "error: E_INVALID_ARGUMENT: unknown option "
+                              << option << '\n';
+                    return 2;
+                }
+            }
+        } catch (const std::exception&) {
+            std::cerr << "error: E_INVALID_ARGUMENT: --port must be 1-65535.\n";
+            return 2;
+        }
+        if (!std::filesystem::is_directory(options.web_root)) {
+            options.web_root.clear();   // API only; no frontend to serve
+        }
+        try {
+            return serve(options);
+        } catch (const std::exception& error) {
+            std::cerr << "error: E_IO: " << error.what() << '\n';
+            return 5;
+        }
+    }
+
     if (argc < 3) {
         print_help();
         std::cerr
@@ -633,22 +691,6 @@ int main(int argc, char* argv[]) {
     }
 
     const std::string command = argv[1];
-
-    // serve [--port N]
-    if (command == "serve") {
-        std::uint16_t port = 8080;
-        for (int i = 2; i + 1 < argc; i += 2) {
-            if (std::string(argv[i]) == "--port") {
-                port = static_cast<std::uint16_t>(std::stoul(argv[i + 1]));
-            }
-        }
-        try {
-            return serve(port);
-        } catch (const std::exception& error) {
-            std::cerr << "error: E_IO: " << error.what() << '\n';
-            return 5;
-        }
-    }
 
     try {
         if (command == "stats") {
