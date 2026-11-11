@@ -6,9 +6,17 @@
  */
 const USE_MOCK = !new URLSearchParams(location.search).has('live');
 const MOCK_FAIL = new URLSearchParams(location.search).has('fail');
-// Live mode talks to the API server (`uatc serve`, port 8080); mock mode
-// has no backend at all.
-const API = USE_MOCK ? '/api' : 'http://127.0.0.1:8080/api';
+// Live mode talks to the API server (`uatc serve`); mock mode has no
+// backend at all. When `uatc serve` serves this page itself, the API is on
+// the same origin. From the separate dev server on port 8000 it is
+// http://127.0.0.1:8080, which the server allows as an origin.
+const API = USE_MOCK
+  ? '/api'
+  : (location.port === '8000' ? 'http://127.0.0.1:8080' : '') + '/api';
+// The session token `uatc serve` prints (SAD 3.9). It travels in the URL
+// fragment (#token=...), which the browser never sends to any server, and
+// is sent back only in the X-UATC-Token header.
+const TOKEN = new URLSearchParams(location.hash.slice(1)).get('token') || '';
 
 const MESSAGES = {
   E_INVALID_ARGUMENT: 'Please check the selected file and input fields.',
@@ -184,7 +192,10 @@ async function api(method, path, body) {
 
   const options = {
     method,
-    headers: { 'Content-Type': 'application/json' }
+    headers: {
+      'Content-Type': 'application/json',
+      'X-UATC-Token': TOKEN
+    }
   };
 
   if (body !== undefined) {
@@ -229,8 +240,8 @@ function showInfo(response) {
   const info = response?.archive || response?.metadata || response;
 
   const rows = [
-    ['Archive', info.archiveName || info.name || 'Unknown'],
-    ['Version', info.version ?? 'Unknown'],
+    ['Archive', info.archiveName || info.path || info.name || 'Unknown'],
+    ['Version', info.formatVersion?.major ?? info.version ?? 'Unknown'],
     ['Files', info.fileCount ?? 'Unknown'],
     ['Blocks', info.blockCount ?? 'Unknown'],
     ['Original size', formatBytes(info.originalBytes)],
