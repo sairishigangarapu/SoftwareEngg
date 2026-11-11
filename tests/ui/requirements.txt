@@ -1,4 +1,0 @@
-# Selenium UI tests (tests/ui) and the coverage report (scripts/coverage.sh).
-selenium>=4.11,<5   # 4.11+ includes Selenium Manager, which fetches a matching ChromeDriver
-pytest>=8,<10
-gcovr>=8,<9
