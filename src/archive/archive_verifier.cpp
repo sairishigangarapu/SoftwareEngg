@@ -5,6 +5,7 @@
 #include "archive/archive_inspector.hpp"
 #include "archive/archive_reader.hpp"
 #include "archive/multi_file.hpp"
+#include "core/path_safety.hpp"
 
 namespace uatc {
 
@@ -19,6 +20,18 @@ VerificationResult ArchiveVerifier::verify(
 
         result.filesChecked = info.fileCount;
         result.blocksChecked = info.blockCount;
+
+        // An archive whose recorded paths would escape the destination is
+        // not safe to extract, so it is not "verified" either, even when
+        // every checksum matches (TC-SEC-01; a tampered archive can carry
+        // a recomputed checksum).
+        for (const auto& file : info.files) {
+            if (!core::is_safe_relative_path(file.path)) {
+                throw core::UatcError(
+                    core::ErrorCode::PathTraversal,
+                    "The archive contains an unsafe file path: " + file.path);
+            }
+        }
 
         // Reading reconstructs the original bytes and validates each
         // block's decoded length and checksum, then the integrity data.

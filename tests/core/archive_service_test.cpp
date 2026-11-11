@@ -18,6 +18,7 @@
 #include "archive/archive_verifier.hpp"
 #include "core/archive_service.hpp"
 #include "core/error.hpp"
+#include "core/sha256.hpp"
 
 namespace fs = std::filesystem;
 using uatc::core::ErrorCode;
@@ -247,6 +248,56 @@ int main() {
         check(!v.success && v.code == ErrorCode::MalformedArchive,
               "TC-ERR-03: non-archive -> E_MALFORMED_ARCHIVE",
               uatc::core::error_code_name(v.code));
+    }
+
+    // --- TC-SEC-01 at archive level: a tampered path with a recomputed
+    //     archive checksum. Every checksum is valid, so only the path rule
+    //     stands between the archive and a write outside the destination.
+    {
+        const fs::path victim = work / "victim1.bin";      // 11 characters
+        write_text(victim, std::string(2000, 'A'));
+        const fs::path evil_archive = work / "evil.uatc";
+        core::compress_path(victim, evil_archive, options);
+
+        auto bytes = read_file(evil_archive);
+        auto u32 = [&bytes](std::size_t at) {
+            std::uint32_t v = 0;
+            for (int i = 0; i < 4; ++i)
+                v |= static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[at + i])) << (8 * i);
+            return v;
+        };
+        auto u64 = [&bytes](std::size_t at) {
+            std::uint64_t v = 0;
+            for (int i = 0; i < 8; ++i)
+                v |= static_cast<std::uint64_t>(static_cast<unsigned char>(bytes[at + i])) << (8 * i);
+            return v;
+        };
+        // Header: file_table_offset is the u64 at byte 16. File record:
+        // file id u32, then path offset u64, then path length u32.
+        const std::size_t file_table = u64(16);
+        const std::size_t path_at = u64(file_table + 4);
+        const std::size_t path_len = u32(file_table + 12);
+        const std::string evil = "../evil.bin";
+        check(path_len == evil.size(), "SEC-01 setup: path lengths match");
+        std::copy(evil.begin(), evil.end(), bytes.begin() + static_cast<long>(path_at));
+        // Integrity region: file SHA-256, archive SHA-256, 12-byte footer.
+        // The archive digest covers everything before the region.
+        const std::size_t body = bytes.size() - 32 - 32 - 12;
+        const auto digest = core::sha256(
+            reinterpret_cast<const std::uint8_t*>(bytes.data()), body);
+        std::copy(digest.begin(), digest.end(), bytes.begin() + static_cast<long>(body + 32));
+        write_file(evil_archive, bytes);
+
+        const auto v = ArchiveVerifier::verify(evil_archive);
+        check(!v.success && v.code == ErrorCode::PathTraversal,
+              "TC-SEC-01: verify refuses a valid-checksum archive with ../ path",
+              uatc::core::error_code_name(v.code) + std::string(" ") + v.message);
+        const fs::path dest = work / "sec_dest";
+        check(code_of([&] { core::extract_path(evil_archive, dest); }) ==
+                  ErrorCode::PathTraversal,
+              "TC-SEC-01: extract refuses it with E_PATH_TRAVERSAL");
+        check(!fs::exists(work / "evil.bin") && !fs::exists(dest / ".." / "evil.bin"),
+              "TC-SEC-01: nothing written outside the destination");
     }
 
     fs::remove_all(work);

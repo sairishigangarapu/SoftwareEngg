@@ -761,8 +761,11 @@ int main(int argc, char* argv[]) {
         return 5;
 
     } catch (const std::exception& error) {
-        std::cerr << "error: E_MALFORMED_ARCHIVE: "
+        // Same classification as `verify` and the API (SAD 4.3.4), so a
+        // checksum failure during extract exits 13/14, not a generic 10.
+        const auto code = uatc::core::classify_exception(error);
+        std::cerr << "error: " << uatc::core::error_code_name(code) << ": "
                   << error.what() << '\n';
-        return 10;
+        return uatc::core::error_exit_code(code);
     }
 }
