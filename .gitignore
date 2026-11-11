@@ -30,6 +30,23 @@ tests/core/compressor_test
 tests/archive_inspector_test
 tests/archive_verifier_test
 tests/integration_roundtrip_test
+tests/core/thread_pool_test
+tests/core/crc32_test
+tests/core/parallel_test
+tests/core/huffman_test
+tests/core/multi_file_test
+tests/core/dir_cli_test
+tests/core/path_safety_test
+tests/core/sha256_test
+tests/core/integrity_test
+tests/core/planner_test
+tests/core/archive_service_test
+tests/server/api_test
+# Coverage build and Python test tooling
+build-cov/
+.venv/
+__pycache__/
+.pytest_cache/
 # CommandCode internal
 .commandcode/
 command-code-session-*.html

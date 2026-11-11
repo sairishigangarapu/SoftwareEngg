@@ -228,8 +228,9 @@ requests and failed `info` calls.
 - Layout works at laptop and tablet width (single column, max width 40 rem).
 - Element IDs stay stable for Selenium (STP risk table): `btn-compress`,
   `btn-extract`, `btn-start`, `btn-back`, `progress-bar`, `progress-text`,
-  `result-body`, `error-text`. PROPOSED new IDs: `btn-info`, `btn-verify`,
-  `btn-browse-source`, `btn-browse-destination`.
+  `result-body`, `error-text`, plus `btn-info`, `btn-verify`,
+  `btn-browse-source`, `btn-browse-destination` (implemented; the full list
+  is in `web/README.md`).
 
 ## 11. Test mapping
 

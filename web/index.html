@@ -4,67 +4,141 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UATC</title>
-  <script>
-    // Live mode (?live) needs the API server: `uatc serve` first.
-    if (new URLSearchParams(location.search).has('live')) {
-      document.documentElement.dataset.live = '1';
-    }
-  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
   <header>
     <h1>UATC</h1>
     <p>Compress and extract files without losing a single byte.</p>
+    <p id="mode-banner" class="banner" hidden></p>
   </header>
 
-  <main>
-    <section id="screen-home" class="screen">
-      <h2 tabindex="-1">What do you want to do?</h2>
-      <p>Select an operation to get started.</p>
+  <main id="main">
+    <!-- 1. Home (wireframes.md section 1, SAD 4.5) -->
+    <section id="screen-home" class="screen" aria-labelledby="home-title">
+      <h2 id="home-title" tabindex="-1">What do you want to do?</h2>
       <div class="operation-grid">
-        <button id="btn-compress" type="button">Compress</button>
-        <button id="btn-extract" type="button">Extract</button>
-        <button id="btn-info" type="button">Archive Info</button>
-        <button id="btn-verify" type="button">Verify Archive</button>
+        <button id="btn-compress" type="button" class="big">
+          Compress
+          <span class="hint">Pack a file or folder into one archive</span>
+        </button>
+        <button id="btn-extract" type="button" class="big">
+          Extract
+          <span class="hint">Get the original files back</span>
+        </button>
+        <button id="btn-info" type="button" class="big">
+          Archive Info
+          <span class="hint">Look inside an archive without extracting it</span>
+        </button>
+        <button id="btn-verify" type="button" class="big">
+          Verify Archive
+          <span class="hint">Check an archive is not damaged</span>
+        </button>
       </div>
     </section>
 
-    <section id="screen-select" class="screen" hidden>
+    <!-- 2-5. Select (one screen, adapted per operation) -->
+    <section id="screen-select" class="screen" aria-labelledby="select-title" hidden>
       <h2 id="select-title" tabindex="-1">Compress</h2>
-      <label for="source">Source file or archive path</label>
-      <input id="source" type="text" placeholder="Enter a file or archive path" autocomplete="off" >
-      <label for="file-picker">Or select a file from your computer</label>
-      <input id="file-picker" type="file" >
-      <label for="destination">Destination path</label>
-      <input id="destination" type="text" placeholder="Enter a file or archive path" autocomplete="off" >
-      <details>
-        <summary>Advanced</summary>
-        <label for="workers">Worker threads</label>
-        <input id="workers" type="number" min="1" value="1">
-      </details>
-      <button id="btn-start" type="button">Start</button>
-      <button id="btn-back" type="button">Back</button>
+
+      <form id="select-form" novalidate>
+        <div class="field">
+          <label id="source-label" for="source">Source (file or folder)</label>
+          <div class="path-row">
+            <input id="source" name="source" type="text" autocomplete="off"
+                   spellcheck="false" aria-describedby="source-help">
+            <button id="btn-browse-source" type="button">Browse…</button>
+          </div>
+          <p id="source-help" class="help">Type a path, or press Browse to pick one.</p>
+        </div>
+
+        <div class="field" id="destination-field">
+          <label id="destination-label" for="destination">Destination archive</label>
+          <div class="path-row">
+            <input id="destination" name="destination" type="text" autocomplete="off"
+                   spellcheck="false" aria-describedby="destination-help">
+            <button id="btn-browse-destination" type="button">Browse…</button>
+          </div>
+          <p id="destination-help" class="help"></p>
+        </div>
+
+        <p id="verify-note" class="help" hidden>Nothing is extracted or written.</p>
+
+        <details id="advanced">
+          <summary>Advanced</summary>
+          <label for="workers">Worker threads</label>
+          <input id="workers" name="workers" type="number" min="1" max="256"
+                 step="1" value="1" inputmode="numeric" aria-describedby="workers-help">
+          <p id="workers-help" class="help">
+            More threads finish large files sooner. The archive is identical either way.
+          </p>
+        </details>
+
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+
+        <div class="actions">
+          <button id="btn-start" type="submit" class="primary">Start</button>
+          <button id="btn-back" type="button">Back</button>
+        </div>
+      </form>
     </section>
 
-    <section id="screen-progress" class="screen" hidden>
-      <h2 tabindex="-1">Working</h2>
-      <progress id="progress-bar" max="1" value="0"></progress>
-      <p id="progress-text" role="status">0%</p>
+    <!-- 6. Progress (wireframes.md section 6) -->
+    <section id="screen-progress" class="screen" aria-labelledby="progress-title" hidden>
+      <h2 id="progress-title" tabindex="-1">Working</h2>
+      <p id="progress-status" role="status">Waiting to start…</p>
+      <progress id="progress-bar" max="1" value="0" aria-labelledby="progress-status"></progress>
+      <p class="progress-numbers">
+        <span id="progress-text">0%</span>
+        <span id="progress-elapsed">Elapsed: 00:00</span>
+      </p>
+      <p class="help">You can keep using this page; the work runs in the background.</p>
+      <div class="actions">
+        <button id="btn-progress-home" type="button">Back to start</button>
+      </div>
     </section>
 
-    <section id="screen-result" class="screen" hidden>
-      <h2 tabindex="-1">Done</h2>
+    <!-- 4, 7, 8. Result -->
+    <section id="screen-result" class="screen" aria-labelledby="result-title" hidden>
+      <h2 id="result-title" tabindex="-1">Done</h2>
       <div id="result-body"></div>
-      <button id="btn-again" type="button">Start over</button>
+      <div class="actions">
+        <button id="btn-again" type="button" class="primary">Start over</button>
+      </div>
     </section>
 
-    <section id="screen-error" class="screen" hidden>
-      <h2 tabindex="-1">Something went wrong</h2>
+    <!-- 9. Error -->
+    <section id="screen-error" class="screen" aria-labelledby="error-title" hidden>
+      <h2 id="error-title" tabindex="-1">Something went wrong</h2>
       <p id="error-text" role="alert"></p>
-      <button id="btn-error-back" type="button">Start over</button>
+      <div class="actions">
+        <button id="btn-error-retry" type="button" class="primary">Try again</button>
+        <button id="btn-error-back" type="button">Start over</button>
+      </div>
     </section>
   </main>
+
+  <!-- File and folder browser, backed by GET /api/fs/list (ADR-06) -->
+  <dialog id="browser" aria-labelledby="browser-title">
+    <form method="dialog" class="browser-form">
+      <h2 id="browser-title">Choose a file</h2>
+      <p class="browser-location">
+        <span class="visually-hidden">Current folder: </span>
+        <code id="browser-path"></code>
+      </p>
+      <div class="browser-toolbar">
+        <button id="browser-up" type="button">Up one folder</button>
+      </div>
+      <p id="browser-message" class="help" role="status"></p>
+      <ul id="browser-list" class="browser-list" aria-label="Folder contents"></ul>
+      <div class="actions">
+        <button id="browser-select" type="button" class="primary">Use this folder</button>
+        <button id="browser-cancel" type="button" value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="app.js"></script>
 </body>

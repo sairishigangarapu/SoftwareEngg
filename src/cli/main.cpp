@@ -18,6 +18,7 @@
 #include "filesystem/file_enumerator.hpp"
 #include "filesystem/file_reader.hpp"
 
+#include "core/archive_service.hpp"
 #include "server/api_server.hpp"
 
 #include <algorithm>
@@ -66,141 +67,6 @@ const char* transform_label(uatc::TransformId id) {
 // Reads a whole file, for the round-trip comparison in the benchmark.
 std::vector<std::uint8_t> read_file_bytes(const std::filesystem::path& path);
 
-// DAY 23 - Directory compression: walk the tree, encode every file with the
-// adaptive engine, and write one multi-file archive (FR-01/02).
-int compress_directory(const std::filesystem::path& dir,
-                       const std::filesystem::path& output,
-                       std::size_t block_size,
-                       std::size_t workers,
-                       bool quiet) {
-    const auto files = uatc::FileEnumerator::enumerate(dir);
-    if (files.empty()) {
-        std::cerr << "error: E_INVALID_ARGUMENT: the directory holds no "
-                     "regular files: " << dir.string() << '\n';
-        return 2;
-    }
-
-    const auto registry = uatc::core::make_default_registry();
-    const uatc::core::TransformSelector selector(registry);
-    const uatc::core::CompressibilityProbe probe;
-
-    const std::size_t file_workers =
-        (workers > 1 && files.size() > 1) ? workers : 1;
-
-    std::vector<uatc::ArchiveInput> inputs;
-    std::vector<std::vector<uatc::CodedBlock>> coded;
-    inputs.reserve(files.size());
-    coded.reserve(files.size());
-
-    std::uint64_t total_original = 0;
-    std::map<uatc::TransformId, std::uint64_t> transform_usage;
-
-    // Encode files in deterministic order; the per-file block pipeline can
-    // still use the pool internally when there is more than one file.
-    for (std::size_t f = 0; f < files.size(); ++f) {
-        const auto path = dir / files[f].relative_path.generic_string();
-        const auto data = uatc::FileReader::read(path);
-        total_original += data.size();
-
-        uatc::ArchiveInput input;
-        input.relative_path = files[f].relative_path.generic_string();
-        input.data = data;
-
-        const auto blocks =
-            uatc::BlockSplitter::split(data, block_size);
-        std::vector<uatc::CodedBlock> per_file;
-        per_file.reserve(blocks.size());
-
-        if (file_workers > 1 && blocks.size() > 1) {
-            auto pool = uatc::core::make_thread_pool(file_workers, file_workers * 4);
-            std::vector<uatc::CodedBlock> out(blocks.size());
-            for (std::size_t b = 0; b < blocks.size(); ++b) {
-                pool->submit([&blocks, &selector, &probe, &out, b] {
-                    out[b] = uatc::core::CompressionManager::encode_block(
-                        blocks[b], selector, probe);
-                });
-            }
-            pool->wait_idle();
-            per_file = std::move(out);
-        } else {
-            for (const auto& block : blocks) {
-                per_file.push_back(
-                    uatc::core::CompressionManager::encode_block(
-                        block, selector, probe));
-            }
-        }
-
-        for (const auto& entry : per_file) {
-            ++transform_usage[entry.transform_id];
-        }
-        coded.push_back(std::move(per_file));
-        inputs.push_back(std::move(input));
-    }
-
-    uatc::MultiFileArchiveWriter::write(output, inputs, coded, block_size);
-
-    if (quiet) {
-        return 0;
-    }
-
-    const auto archive_bytes = std::filesystem::file_size(output);
-
-    std::cout
-        << "Compressed:        " << dir.string() << " (directory)\n"
-        << "Archive:           " << output.string() << '\n'
-        << "Files:             " << files.size() << '\n'
-        << "Original bytes:    " << total_original << '\n'
-        << "Archive bytes:     " << archive_bytes << '\n'
-        << "Transforms:\n";
-
-    for (const auto& entry : transform_usage) {
-        std::cout
-            << "  " << transform_name(entry.first)
-            << " (" << static_cast<unsigned int>(entry.first) << "): "
-            << entry.second << " blocks\n";
-    }
-
-    return 0;
-}
-
-// DAY 23 - Multi-file extraction: restore the whole tree under the
-// destination, refusing any recorded path that escapes it.
-int extract_multi_file(const std::filesystem::path& archive,
-                       const std::filesystem::path& output_dir,
-                       bool quiet) {
-    const auto tree = uatc::MultiFileArchiveReader::read(archive);
-
-    for (const auto& file : tree.files) {
-        const auto relative = uatc::core::safe_relative_path(file.relative_path);
-        const auto destination = output_dir / relative;
-        if (destination.has_parent_path()) {
-            std::filesystem::create_directories(destination.parent_path());
-        }
-        std::ofstream out(destination, std::ios::binary);
-        if (!out) {
-            std::cerr << "error: E_IO: cannot write: "
-                      << destination.string() << '\n';
-            return 5;
-        }
-        out.write(reinterpret_cast<const char*>(file.data.data()),
-                  static_cast<std::streamsize>(file.data.size()));
-        if (!out) {
-            std::cerr << "error: E_IO: write failed: "
-                      << destination.string() << '\n';
-            return 5;
-        }
-        if (!quiet) {
-            std::cout
-                << "Extracted:         " << destination.string() << '\n';
-        }
-    }
-
-    if (!quiet) {
-        std::cout << "Files:             " << tree.files.size() << '\n';
-    }
-    return 0;
-}
-
 void print_help() {
     std::cout
         << "UATC - Universal Adaptive Transform Compression\n\n"
@@ -212,14 +78,18 @@ void print_help() {
         << "  uatc info <archive.uatc>\n"
         << "  uatc verify <archive.uatc>\n"
         << "  uatc benchmark <dir> [--block-size BYTES] [--workers N]\n"
-        << "                   [--gzip] [--out FILE]\n\n"
+        << "                   [--gzip] [--out FILE]\n"
+        << "  uatc serve [--port N] [--root DIR] [--web DIR] [--allow-origin URL]\n\n"
         << "Commands:\n"
         << "  benchmark Runs the compressor over every file in a directory.\n"
         << "  stats    Analyse a file and report what the engine will do to it.\n"
         << "  compress  Compress a file into a .uatc archive.\n"
         << "  extract   Restore the contents of a .uatc archive.\n"
         << "  info      Display archive metadata without decoding payloads.\n"
-        << "  verify    Validate archive structure and payload integrity.\n\n"
+        << "  verify    Validate archive structure and payload integrity.\n"
+        << "  serve     Start the local HTTP API for the web frontend\n"
+        << "            (127.0.0.1 only; paths limited to --root, default the\n"
+        << "            current folder; prints a session token).\n\n"
         << "Options:\n"
         << "  --block-size BYTES   Block size to split the input into "
         << "(default 1 MiB).\n"
@@ -234,6 +104,8 @@ const char* codec_name(uatc::CodecId id) {
             return "None";
         case uatc::CodecId::Baseline:
             return "Baseline";
+        case uatc::CodecId::Huffman:
+            return "Huffman";
         default:
             return "Unknown";
     }
@@ -302,21 +174,11 @@ int print_verify(const std::filesystem::path& path) {
     const auto result = uatc::ArchiveVerifier::verify(path);
 
     if (!result.success) {
-        if (result.message == "Block checksum mismatch.") {
-            std::cerr << "error: E_BLOCK_CHECKSUM: "
-                      << result.message << '\n';
-            return 13;
-        }
-
-        if (result.message == "Unsupported UATC archive version.") {
-            std::cerr << "error: E_UNSUPPORTED_VERSION: "
-                      << result.message << '\n';
-            return 11;
-        }
-
-        std::cerr << "error: E_MALFORMED_ARCHIVE: "
-                  << result.message << '\n';
-        return 10;
+        // The verifier classifies the failure (SAD 4.3.4), so every case
+        // in FR-12 gets its own code and exit status (TC-ERR-04).
+        std::cerr << "error: " << uatc::core::error_code_name(result.code)
+                  << ": " << result.message << '\n';
+        return uatc::core::error_exit_code(result.code);
     }
 
     std::cout
@@ -542,8 +404,9 @@ int compress_file(const std::filesystem::path& input,
     options.block_size = block_size;
     options.workers = workers;
 
+    // One facade for a file or a folder (SAD 4.3.3), shared with the API.
     ConsoleProgressSink sink;
-    const auto result = uatc::core::CompressionManager::compress(
+    const auto result = uatc::core::compress_path(
         input, output, options, quiet ? nullptr : &sink);
     sink.finish();
 
@@ -552,8 +415,10 @@ int compress_file(const std::filesystem::path& input,
     }
 
     std::cout
-        << "Compressed:        " << input.string() << '\n'
+        << "Compressed:        " << input.string()
+        << (std::filesystem::is_directory(input) ? " (directory)" : "") << '\n'
         << "Archive:           " << output.string() << '\n'
+        << "Files:             " << result.fileCount << '\n'
         << "Original bytes:    " << result.originalBytes << '\n'
         << "Archive bytes:     " << result.archiveBytes << '\n'
         << "Blocks:            " << result.blockCount << '\n';
@@ -585,12 +450,15 @@ int compress_file(const std::filesystem::path& input,
 int extract_archive(const std::filesystem::path& archive,
                     const std::filesystem::path& output_dir,
                     bool quiet) {
-    const auto result =
-        uatc::core::CompressionManager::extract(archive, output_dir);
+    // Single-file and folder archives alike (SAD 4.3.3).
+    const auto result = uatc::core::extract_path(archive, output_dir);
 
     if (!quiet) {
+        for (const auto& path : result.written) {
+            std::cout << "Extracted:         " << path.string() << '\n';
+        }
         std::cout
-            << "Extracted:         " << result.destination.string() << '\n'
+            << "Files:             " << result.files << '\n'
             << "Bytes written:     " << result.bytesWritten << '\n';
     }
 
@@ -605,14 +473,22 @@ std::vector<std::uint8_t> read_file_bytes(const std::filesystem::path& path) {
         std::istreambuf_iterator<char>());
 }
 
-// The API server: `uatc serve [--port N]` starts the localhost control
-// plane and blocks until interrupted.
-int serve(std::uint16_t port) {
-    uatc::server::ApiServer server(port);
+// The API server: `uatc serve` starts the localhost control plane and
+// blocks until interrupted. It prints the session token once; every API
+// call except /api/health must carry it (SAD 3.9, TC-SEC-03).
+int serve(const uatc::server::ServerOptions& options) {
+    uatc::server::ApiServer server(options);
+    const std::string base =
+        "http://127.0.0.1:" + std::to_string(options.port);
     std::cout
-        << "UATC API server listening on http://127.0.0.1:" << port
-        << "  (Ctrl-C to stop)\n"
-        << "  open the frontend with:  web/index.html?live\n";
+        << "UATC API server listening on " << base << "  (Ctrl-C to stop)\n"
+        << "  allowed folder: " << server.allowed_root().string() << '\n'
+        << "  session token:  " << server.token() << '\n';
+    if (!options.web_root.empty()) {
+        std::cout << "  open the app:   " << base << "/?live#token="
+                  << server.token() << '\n';
+    }
+    std::cout << std::flush;
     server.serve_forever();
     return 0;
 }
@@ -625,6 +501,52 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // serve [--port N] [--root DIR] [--web DIR] [--allow-origin URL]...
+    if (argc >= 2 && std::string(argv[1]) == "serve") {
+        uatc::server::ServerOptions options;
+        options.web_root = "web";
+        try {
+            for (int i = 2; i < argc; ++i) {
+                const std::string option = argv[i];
+                if (i + 1 >= argc) {
+                    std::cerr << "error: E_INVALID_ARGUMENT: " << option
+                              << " needs a value.\n";
+                    return 2;
+                }
+                const std::string value = argv[++i];
+                if (option == "--port") {
+                    const auto port = std::stoul(value);
+                    if (port == 0 || port > 65535) {
+                        throw std::invalid_argument("port");
+                    }
+                    options.port = static_cast<std::uint16_t>(port);
+                } else if (option == "--root") {
+                    options.allowed_root = value;
+                } else if (option == "--web") {
+                    options.web_root = value;
+                } else if (option == "--allow-origin") {
+                    options.allowed_origins.push_back(value);
+                } else {
+                    std::cerr << "error: E_INVALID_ARGUMENT: unknown option "
+                              << option << '\n';
+                    return 2;
+                }
+            }
+        } catch (const std::exception&) {
+            std::cerr << "error: E_INVALID_ARGUMENT: --port must be 1-65535.\n";
+            return 2;
+        }
+        if (!std::filesystem::is_directory(options.web_root)) {
+            options.web_root.clear();   // API only; no frontend to serve
+        }
+        try {
+            return serve(options);
+        } catch (const std::exception& error) {
+            std::cerr << "error: E_IO: " << error.what() << '\n';
+            return 5;
+        }
+    }
+
     if (argc < 3) {
         print_help();
         std::cerr
@@ -633,22 +555,6 @@ int main(int argc, char* argv[]) {
     }
 
     const std::string command = argv[1];
-
-    // serve [--port N]
-    if (command == "serve") {
-        std::uint16_t port = 8080;
-        for (int i = 2; i + 1 < argc; i += 2) {
-            if (std::string(argv[i]) == "--port") {
-                port = static_cast<std::uint16_t>(std::stoul(argv[i + 1]));
-            }
-        }
-        try {
-            return serve(port);
-        } catch (const std::exception& error) {
-            std::cerr << "error: E_IO: " << error.what() << '\n';
-            return 5;
-        }
-    }
 
     try {
         if (command == "stats") {
@@ -735,10 +641,6 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            if (std::filesystem::is_directory(input)) {
-                return compress_directory(input, output, block_size,
-                                          workers, quiet);
-            }
             return compress_file(input, output, block_size, workers, quiet);
         }
 
@@ -765,29 +667,6 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            // A multi-file archive (file_count > 1) restores as a tree; a
-            // single-file archive restores as one file. Distinguish by
-            // reading the header's file count, not by trying and failing.
-            std::uint32_t file_count = 1;
-            {
-                std::ifstream probe(archive, std::ios::binary);
-                if (probe) {
-                    probe.seekg(8);  // magic 0, version 4, header_size 6
-                    char fc[4] = {};
-                    probe.read(fc, 4);
-                    file_count = static_cast<std::uint32_t>(
-                        static_cast<unsigned char>(fc[0])) |
-                        (static_cast<std::uint32_t>(
-                            static_cast<unsigned char>(fc[1])) << 8) |
-                        (static_cast<std::uint32_t>(
-                            static_cast<unsigned char>(fc[2])) << 16) |
-                        (static_cast<std::uint32_t>(
-                            static_cast<unsigned char>(fc[3])) << 24);
-                }
-            }
-            if (file_count > 1) {
-                return extract_multi_file(archive, output_dir, quiet);
-            }
             return extract_archive(archive, output_dir, quiet);
         }
 
@@ -882,8 +761,11 @@ int main(int argc, char* argv[]) {
         return 5;
 
     } catch (const std::exception& error) {
-        std::cerr << "error: E_MALFORMED_ARCHIVE: "
+        // Same classification as `verify` and the API (SAD 4.3.4), so a
+        // checksum failure during extract exits 13/14, not a generic 10.
+        const auto code = uatc::core::classify_exception(error);
+        std::cerr << "error: " << uatc::core::error_code_name(code) << ": "
                   << error.what() << '\n';
-        return 10;
+        return uatc::core::error_exit_code(code);
     }
 }

@@ -120,10 +120,12 @@ ArchiveInfo ArchiveInspector::inspect(
     if (header.header_size != HEADER_SIZE) {
         throw std::runtime_error("Invalid UATC header size.");
     }
-    if (header.file_count != 1) {
-        throw std::runtime_error(
-            "This inspector currently supports one file per archive."
-        );
+    // A single-file archive has one file record; a folder archive (Day 20,
+    // multi_file.cpp) has one per file, in file-table order. Both share the
+    // header, the record layouts and the block index, so one reader serves
+    // both (FR-11 for folder archives).
+    if (header.file_count == 0) {
+        throw std::runtime_error("Archive has no files.");
     }
     if (header.file_table_offset < HEADER_SIZE ||
         header.block_index_offset < header.file_table_offset ||
@@ -131,44 +133,14 @@ ArchiveInfo ArchiveInspector::inspect(
         throw std::runtime_error("Invalid archive section offsets.");
     }
 
-    const std::uint64_t file_table_end =
-        checked_add(header.file_table_offset, FILE_RECORD_SIZE);
-
-    if (file_table_end > archive_size) {
+    // Bounds before any allocation: every count the header declares must
+    // fit in the bytes that are actually there (TC-SEC-02).
+    const std::uint64_t file_table_end = checked_add(
+        header.file_table_offset,
+        checked_multiply(header.file_count, FILE_RECORD_SIZE));
+    if (file_table_end > archive_size ||
+        file_table_end > header.block_index_offset) {
         throw std::runtime_error("File table extends beyond archive.");
-    }
-
-    reader.seekg(header.file_table_offset);
-
-    const std::uint32_t file_id = reader.read_u32();
-    const std::uint64_t path_offset = reader.read_u64();
-    const std::uint32_t path_length = reader.read_u32();
-    const std::uint64_t original_size = reader.read_u64();
-    const std::uint32_t first_block = reader.read_u32();
-    const std::uint32_t file_block_count = reader.read_u32();
-
-    if (file_id != 0) {
-        throw std::runtime_error("Invalid file ID.");
-    }
-    if (first_block != 0 && header.block_count != 0) {
-        throw std::runtime_error("Invalid first block index.");
-    }
-    if (file_block_count != header.block_count) {
-        throw std::runtime_error("File/block count mismatch.");
-    }
-
-    const std::uint64_t path_end = checked_add(path_offset, path_length);
-    if (path_offset < file_table_end ||
-        path_end > archive_size ||
-        path_end > header.block_index_offset) {
-        throw std::runtime_error(
-            "File path extends beyond its valid archive region."
-        );
-    }
-
-    reader.seekg(path_offset);
-    if (reader.read_string(path_length).empty()) {
-        throw std::runtime_error("Archive contains an empty file path.");
     }
 
     const std::uint64_t block_index_size =
@@ -188,16 +160,78 @@ ArchiveInfo ArchiveInspector::inspect(
     info.formatVersion = header.version;
     info.fileCount = header.file_count;
     info.blockCount = header.block_count;
-    info.originalBytes = original_size;
     info.archiveBytes = archive_size;
-    info.ratio = original_size == 0
+
+    // File records: ids in order, blocks contiguous and covering the index.
+    std::uint64_t next_block = 0;
+    for (std::uint32_t f = 0; f < header.file_count; ++f) {
+        reader.seekg(header.file_table_offset + f * FILE_RECORD_SIZE);
+
+        const std::uint32_t file_id = reader.read_u32();
+        const std::uint64_t path_offset = reader.read_u64();
+        const std::uint32_t path_length = reader.read_u32();
+        const std::uint64_t original_size = reader.read_u64();
+        const std::uint32_t first_block = reader.read_u32();
+        const std::uint32_t file_block_count = reader.read_u32();
+
+        if (file_id != f) {
+            throw std::runtime_error("Invalid file ID.");
+        }
+        if (file_block_count != 0 && first_block != next_block) {
+            throw std::runtime_error("Invalid first block index.");
+        }
+        next_block = checked_add(next_block, file_block_count);
+        if (next_block > header.block_count) {
+            throw std::runtime_error("File/block count mismatch.");
+        }
+
+        const std::uint64_t path_end = checked_add(path_offset, path_length);
+        if (path_length == 0 ||
+            path_offset < file_table_end ||
+            path_end > archive_size ||
+            path_end > header.block_index_offset) {
+            throw std::runtime_error(
+                "File path extends beyond its valid archive region."
+            );
+        }
+
+        reader.seekg(path_offset);
+        ArchivedFileInfo file;
+        file.path = reader.read_string(path_length);
+        if (file.path.empty()) {
+            throw std::runtime_error("Archive contains an empty file path.");
+        }
+        file.originalBytes = original_size;
+        file.blocks = file_block_count;
+
+        info.originalBytes = checked_add(info.originalBytes, original_size);
+        info.files.push_back(std::move(file));
+    }
+    if (next_block != header.block_count) {
+        throw std::runtime_error("File/block count mismatch.");
+    }
+
+    // Same definition as the compressor, the CLI and the API:
+    // original / archive, so 2.0 means "half the size".
+    info.ratio = archive_size == 0
         ? 0.0
-        : static_cast<double>(archive_size) /
-          static_cast<double>(original_size);
+        : static_cast<double>(info.originalBytes) /
+          static_cast<double>(archive_size);
 
     reader.seekg(header.block_index_offset);
 
+    // Which file each block belongs to, and its index inside that file.
+    // The block index was bounds-checked against the archive size above,
+    // so block_count is at most archive_size / BLOCK_RECORD_SIZE here.
+    std::uint32_t current_file = 0;
+    std::uint64_t file_block_start = 0;
+
     for (std::uint32_t i = 0; i < header.block_count; ++i) {
+        while (current_file < info.files.size() &&
+               i >= file_block_start + info.files[current_file].blocks) {
+            file_block_start += info.files[current_file].blocks;
+            ++current_file;
+        }
         const std::uint32_t block_file_id = reader.read_u32();
         const std::uint32_t block_id = reader.read_u32();
         const std::uint64_t payload_offset = reader.read_u64();
@@ -210,10 +244,10 @@ ArchiveInfo ArchiveInspector::inspect(
         const std::uint16_t transform_parameter = reader.read_u16();
         reader.read_u32(); // Checksum is metadata; payload is not decoded.
 
-        if (block_file_id != 0) {
+        if (block_file_id != current_file) {
             throw std::runtime_error("Invalid block file ID.");
         }
-        if (block_id != i) {
+        if (block_id != i - file_block_start) {
             throw std::runtime_error("Block IDs are not sequential.");
         }
         if (!is_known_transform(transform_id)) {

@@ -22,6 +22,13 @@ struct CodecUsage {
     std::uint64_t blocks = 0;
 };
 
+// One entry of the archive's file table.
+struct ArchivedFileInfo {
+    std::string path;               // relative path as recorded
+    std::uint64_t originalBytes = 0;
+    std::uint64_t blocks = 0;
+};
+
 struct ArchiveInfo {
     std::filesystem::path path;
 
@@ -32,13 +39,17 @@ struct ArchiveInfo {
     std::uint64_t originalBytes = 0;
     std::uint64_t archiveBytes = 0;
 
-    double ratio = 0.0;
+    double ratio = 0.0;             // originalBytes / archiveBytes
 
     std::uint64_t storedBlocks = 0;
     std::uint64_t compressedBlocks = 0;
 
     std::vector<TransformUsage> transformUsage;
     std::vector<CodecUsage> codecUsage;
+
+    // Every file in the archive, in file-table order (one for a single-file
+    // archive, one per file for a folder archive).
+    std::vector<ArchivedFileInfo> files;
 };
 
 class ArchiveInspector {
