@@ -440,7 +440,7 @@ function choosePath(path) {
   target.removeAttribute('aria-invalid');
   $('browser').close();
   target.focus();
-  target.dispatchEvent(new Event('change'));
+  if (target === $('source')) suggestDestination();
 }
 
 $('browser-up').addEventListener('click', () => {
@@ -484,8 +484,11 @@ function choose(op) {
   show('select');
 }
 
-// Suggest a destination once a source is chosen (wireframes.md 2-3).
-$('source').addEventListener('change', () => {
+// Suggest a destination once a source is picked with Browse
+// (wireframes.md 2-3). Only from the browser, never on a typed source: a
+// suggestion appearing while the user moves on to type the destination
+// would be appended to what they type.
+function suggestDestination() {
   const source = $('source').value.trim();
   if (!source || $('destination').value.trim()) return;
   if (operation === 'compress') {
@@ -494,7 +497,7 @@ $('source').addEventListener('change', () => {
     $('destination').value = joinPath(dirname(source),
       basename(source).replace(/\.uatc$/i, '') + '_restored');
   }
-});
+}
 
 function clearFormError() {
   $('form-error').hidden = true;
