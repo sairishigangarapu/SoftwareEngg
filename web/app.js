@@ -279,10 +279,12 @@ async function api(method, path, body) {
 // A small stand-in for the backend with the same reply shapes.
 async function mockApi(method, path, body) {
   await new Promise(resolve => setTimeout(resolve, 120));
-  const url = new URL(path, 'http://mock');
+  // Split "/fs/list?path=..." by hand: no URL object, no base address.
+  const [pathname, queryString = ''] = path.split('?');
+  const query = new URLSearchParams(queryString);
 
-  if (method === 'GET' && url.pathname === '/fs/list') {
-    const dir = url.searchParams.get('path') || MOCK_ROOT;
+  if (method === 'GET' && pathname === '/fs/list') {
+    const dir = query.get('path') || MOCK_ROOT;
     if (!dir.startsWith(MOCK_ROOT)) {
       throw { code: 'E_PERMISSION' };
     }
@@ -291,10 +293,10 @@ async function mockApi(method, path, body) {
     return { path: dir, root: MOCK_ROOT, entries };
   }
 
-  if (method === 'GET' && url.pathname === '/archives/info') {
+  if (method === 'GET' && pathname === '/archives/info') {
     if (MOCK_FAIL) throw { code: 'E_MALFORMED_ARCHIVE' };
     return {
-      path: url.searchParams.get('path'),
+      path: query.get('path'),
       formatVersion: { major: 1, minor: 0 },
       fileCount: 3,
       blockCount: 700,
@@ -315,7 +317,7 @@ async function mockApi(method, path, body) {
   }
 
   if (method === 'POST') {
-    mockJob = { operation: url.pathname.split('/').pop(), progress: 0, body };
+    mockJob = { operation: pathname.split('/').pop(), progress: 0, body };
     return { jobId: 'j-0001' };
   }
 
