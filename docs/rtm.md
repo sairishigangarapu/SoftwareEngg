@@ -44,7 +44,7 @@ Columns:
 |---|---|---|---|---|---|---|---|---|
 | 16 | NFR-01 | Correctness: byte-for-byte reconstruction | all layers | SAD 3.1 | whole pipeline | TC-ARC-02, TC-ARC-04, TC-CORE-03, TC-CORE-05 | TC-NFR-01 | Pass |
 | 17 | NFR-02 | Performance: scales with threads; honest comparison with gzip/zstd | Thread-Pool Scheduler, Benchmark Harness | SAD 3.6 | `src/core/thread_pool.cpp`, `src/cli/main.cpp` (`benchmark`), `pcomp/`, `scripts/system_validation.sh` | - | TC-PAR-04, TC-PAR-05, TC-NFR-02 | Recorded (see report) |
-| 18 | NFR-03 | Reliability: corruption always detected | Integrity Module | SAD 3.9 | as FR-09, FR-12 | TC-INT-01, TC-INT-02, TC-SEC-02 | TC-PAR-02, TC-NFR-03, TC-SEC-05 | Partial (fuzzing not run) |
+| 18 | NFR-03 | Reliability: corruption always detected | Integrity Module | SAD 3.9 | as FR-09, FR-12 | TC-INT-01, TC-INT-02, TC-SEC-02 | TC-PAR-02, TC-NFR-03, TC-SEC-05 | Pass |
 | 19 | NFR-04 | Usability: simple CLI and web UI | Web Frontend, CLI | SAD 4.5 | `web/*`, `src/cli/main.cpp` | - | TC-UI-04 (+ keyboard and label tests) | Pass |
 | 20 | NFR-05 | Maintainability: add a transform without redesign | Transform interface, Registry | SAD 4.3.2 | `include/core/transform.hpp`, `include/core/registry.hpp`, `src/core/transform_factory.cpp` | TC-NFR-05 | - | Not run |
 | 21 | NFR-06 | Portability: standard C++17 | - | SAD 3.6 | `CMakeLists.txt`, `Makefile`, `Dockerfile` | - | TC-NFR-06 | Not run (one OS only) |
@@ -82,10 +82,11 @@ the exact test.
 | TC-UI-01..05 | `tests/ui/test_ui.py` |
 | TC-NFR-01, TC-NFR-07 | `scripts/system_validation.sh` |
 | TC-SEC-01 | `tests/core/path_safety_test.cpp`, `tests/core/archive_service_test.cpp`, `scripts/system_validation.sh` |
-| TC-SEC-02 | `scripts/system_validation.sh` |
+| TC-SEC-02 | `scripts/system_validation.sh`, `tests/fuzz/archive_fuzz_test.cpp` |
+| TC-NFR-03 | `tests/fuzz/archive_fuzz_test.cpp` (`make fuzz` under ASan/UBSan) |
 | TC-SEC-03, TC-SEC-04 | `tests/server/api_test.cpp` |
 | TC-SEC-05 | SonarCloud quality gate on every pull request |
-| TC-NFR-03, TC-NFR-05, TC-NFR-06 | not automated yet (see the validation report) |
+| TC-NFR-05, TC-NFR-06 | not automated yet (see the validation report) |
 
 ## Coverage of the matrix
 

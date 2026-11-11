@@ -2,6 +2,7 @@
 #include "archive/archive_reader.hpp"
 
 #include <cstdint>
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -56,6 +57,19 @@ std::uint64_t checked_add(
     }
 
     return a + b;
+}
+
+// The most a stored block can expand to when decoded. The real worst case
+// is about 680x (64 MiB of zeros -> 99 KB with RLE + Huffman); the codec
+// chain's theoretical ceiling is about 1,000x. 4096x never rejects a real
+// archive but stops tiny crafted archives from claiming gigabytes.
+constexpr std::uint64_t kMaxExpansion = 4096;
+
+std::uint64_t max_decoded_length(std::uint64_t stored_length) {
+    if (stored_length > std::numeric_limits<std::uint64_t>::max() / kMaxExpansion - 1) {
+        return std::numeric_limits<std::uint64_t>::max();
+    }
+    return (stored_length + 1) * kMaxExpansion;
 }
 
 std::uint64_t checked_multiply(
@@ -205,6 +219,17 @@ ArchivedFile ArchiveReader::read_file(
         );
     }
 
+    // The footer's header offset is not covered by the archive SHA-256,
+    // so it is checked here: the writer always puts the header at 0
+    // (found by the fuzz test, TC-NFR-03).
+    std::uint64_t footer_header_offset = 0;
+    for (int i = 0; i < 8; ++i) {
+        footer_header_offset |= static_cast<std::uint64_t>(footer[i]) << (8 * i);
+    }
+    if (footer_header_offset != 0) {
+        throw std::runtime_error("Invalid header offset in the archive footer.");
+    }
+
     // The archive SHA-256 covers every byte before the integrity region. It
     // is verified *last*, after the block checksums and the file checksum, so
     // that the most specific diagnosis is the one reported: a flipped byte
@@ -316,6 +341,7 @@ ArchivedFile ArchiveReader::read_file(
 
     std::vector<BlockMetadata> metadata;
     metadata.reserve(header.block_count);
+    std::uint64_t declared_total = 0;
 
     for (std::uint32_t i = 0; i < header.block_count; ++i) {
         const std::uint32_t block_file_id = reader.read_u32();
@@ -359,6 +385,15 @@ ArchivedFile ArchiveReader::read_file(
             );
         }
 
+        // A block cannot decode to more than the codec chain can expand
+        // its stored bytes (TC-SEC-02, found by the fuzz test TC-NFR-03).
+        if (original_length > max_decoded_length(stored_length)) {
+            throw std::runtime_error(
+                "Block declares more data than its payload can hold."
+            );
+        }
+        declared_total = checked_add(declared_total, original_length);
+
         const std::uint64_t payload_end =
             checked_add(payload_offset, stored_length);
 
@@ -383,6 +418,15 @@ ArchivedFile ArchiveReader::read_file(
 
     std::vector<std::uint8_t> result;
 
+    // The file record's size must be exactly what its blocks add up to;
+    // otherwise it is not trusted for anything, and certainly not for an
+    // allocation (a 300-byte archive could otherwise claim 16 EiB).
+    if (original_size != declared_total) {
+        throw std::runtime_error(
+            "File size does not match its blocks."
+        );
+    }
+
     if (original_size >
         static_cast<std::uint64_t>(result.max_size())) {
         throw std::runtime_error(
@@ -390,7 +434,10 @@ ArchivedFile ArchiveReader::read_file(
         );
     }
 
-    result.reserve(static_cast<std::size_t>(original_size));
+    // Reserve at most 64 MiB up front; beyond that the vector grows as
+    // blocks are actually decoded, so memory follows real data only.
+    result.reserve(static_cast<std::size_t>(
+        std::min<std::uint64_t>(original_size, 64ULL * 1024 * 1024)));
 
     for (const auto& block : metadata) {
         reader.seekg(block.payload_offset);

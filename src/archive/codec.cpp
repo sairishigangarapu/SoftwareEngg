@@ -66,12 +66,26 @@ std::vector<std::uint8_t> Codec::decode(
     if (id == CodecId::Huffman) {
         // The original size is carried by the Huffman payload header, so
         // the decoder does not need it here.
-        core::HuffmanCoder coder;
-        std::size_t orig = 0;
-        for (int i = 0; i < 8; ++i) {
-            orig |= static_cast<std::size_t>(input[256 + i]) << (8 * i);
+        //
+        // Untrusted input (TC-NFR-03, TC-SEC-02): check the header is there
+        // before reading it, and that the declared size is one the payload
+        // can actually encode. Every Huffman code is at least one bit, so
+        // n payload bytes decode to at most 8 * n symbols; anything larger
+        // is rejected before the decoder reserves memory for it.
+        constexpr std::size_t kHuffmanHeader = 256 + 8;
+        if (input.size() < kHuffmanHeader) {
+            throw std::runtime_error("Huffman payload is truncated.");
         }
-        return coder.decode(core::ByteSpan(input), orig);
+        core::HuffmanCoder coder;
+        std::uint64_t orig = 0;
+        for (int i = 0; i < 8; ++i) {
+            orig |= static_cast<std::uint64_t>(input[256 + i]) << (8 * i);
+        }
+        if (orig / 8 > input.size() - kHuffmanHeader) {
+            throw std::runtime_error(
+                "Huffman payload declares more data than it can hold.");
+        }
+        return coder.decode(core::ByteSpan(input), static_cast<std::size_t>(orig));
     }
 
     if (id != CodecId::Baseline)

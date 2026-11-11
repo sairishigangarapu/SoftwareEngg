@@ -42,6 +42,21 @@ pipeline {
             }
         }
 
+        stage('Fuzz (ASan/UBSan)') {
+            // TC-NFR-03: 20,000 random damaged archives plus an exhaustive
+            // header pass, with the library built under AddressSanitizer and
+            // UBSan. A failing input is kept in uatc_fuzz_test_dir/.
+            steps {
+                sh 'make fuzz'
+            }
+            post {
+                failure {
+                    archiveArtifacts artifacts: 'uatc_fuzz_test_dir/failure_*.uatc',
+                                     allowEmptyArchive: true
+                }
+            }
+        }
+
         stage('Coverage') {
             // STP exit criterion: >= 80% lines and >= 70% branches on the
             // core modules. scripts/coverage.sh fails the stage below that.

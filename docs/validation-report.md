@@ -13,17 +13,17 @@ Unit results and coverage: `docs/test-report.md`.
 | | |
 |---|---|
 | STP test cases | 49 |
-| Pass | 38 |
+| Pass | 39 |
 | Partial (passes, but a sub-check is missing or blocked) | 8 |
-| Not run in this cycle | 3 (TC-NFR-03 fuzzing, TC-NFR-05 dummy transform, TC-NFR-06 second OS) |
+| Not run in this cycle | 2 (TC-NFR-05 dummy transform, TC-NFR-06 second OS) |
 | Fail | 0 |
-| Defects found in this cycle | 6 (4 fixed, 2 open) |
+| Defects found in this cycle | 12 (9 fixed, 3 open) |
 | Core coverage | 91.0% lines, 81.1% branches (target 80 / 70) |
 | Requirements with a passing test | 21 of 23 |
 
 **Recommendation**: the system is fit for the final demonstration. It is
-not yet at the STP exit criteria: three planned cases have not been run and
-two defects are open (section 6).
+not yet at the STP exit criteria: two planned cases have not been run and
+two defects that block exit are open (section 6).
 
 ## 2. How the results were produced
 
@@ -80,7 +80,7 @@ tree of 203 files (nested folders, spaces, Unicode names, 200 tiny files).
 | TC-UI-01..05 | FR-13, FR-14, NFR-04, NFR-08 | Pass | `tests/ui/test_ui.py`, 17 tests, 3 consecutive green runs |
 | TC-NFR-01 | NFR-01 | Pass | Every corpus file and the 203-file tree verified and restored with identical SHA-256 |
 | TC-NFR-02 | NFR-02 | Pass (recorded) | See 4.2. Comparison repeated: ratios are deterministic |
-| TC-NFR-03 | NFR-03 | **Not run** | No fuzzer yet (planned: 10,000 mutated archives under ASan/UBSan) |
+| TC-NFR-03 | NFR-03 | Pass | `make fuzz`: 45,250 damaged archives (exhaustive header pass of 25,356 plus 20,000 random stacked mutations, half of them re-sealed with a recomputed checksum) under AddressSanitizer + UBSan. No crash, hang, memory error, undefined behaviour, write outside the destination or wrong content. Found D-07..D-11 on the way (section 5) |
 | TC-NFR-05 | NFR-05 | **Not run** | No test-only dummy transform yet |
 | TC-NFR-06 | NFR-06 | **Not run** | Only Ubuntu 24.04 was used this cycle; the Docker build and a second OS (Windows, used by the team) are still to be run |
 | TC-NFR-07 | NFR-07 | Pass | Ratio, time, throughput and per-transform block counts reported by CLI, API and UI |
@@ -146,34 +146,9 @@ Findings:
 | D-04 | Medium | TC-FS-02 | Empty folders are not stored in folder archives (the enumerator only records regular files), so they are missing after extraction | **Open**, archive layer owner |
 | D-05 | Low | TC-INT-01 via CLI | `uatc extract` exited 10 (E_MALFORMED_ARCHIVE) for any failure, including checksum mismatches that `verify` reports as 13/14 | **Fixed** (the CLI uses the shared classifier) |
 | D-06 | Medium (security) | TC-SEC-01 | `uatc verify` reported OK for an archive with a `../` path and a valid checksum (extraction was already refused) | **Fixed** (the verifier checks every recorded path; regression test added) |
-
-## 6. Exit criteria (STP section 5)
-
-| Criterion | Status |
-|---|---|
-| 100% of planned test cases executed | **Not met**: 46 of 49 (TC-NFR-03, TC-NFR-05, TC-NFR-06 not run) |
-| No open critical or high defects | **Not met**: D-03 is open (High: unit assertions are not enforced) |
-| Whole corpus round-trips with identical SHA-256 | Met |
-| Unit coverage >= 80% lines and >= 70% branches on core modules | Met (91.0% / 81.1%) |
-| SonarQube quality gate passes; acceptance criteria satisfied | Met for PR #59 after fixes |
-
-### Work needed to reach the exit criteria
-
-1. **D-03**: build tests without `-DNDEBUG` and update or fix the seven
-   assertions (core owner). Add a CTest stage to Jenkins so this cannot
-   recur.
-2. **D-04**: record empty directories in the file table (archive owner),
-   with a TC-FS-02 test.
-3. **TC-NFR-03**: a mutation fuzzer over the archive reader (10,000+
-   cases, ASan/UBSan).
-4. **TC-NFR-05**: a test-only transform registered with a new ID, compressed
-   and extracted without touching the archive, API, UI or CLI code.
-5. **TC-NFR-06**: run `make test` in the Docker image and on Windows.
-
-## 7. Sign-off
-
-| Role | Name | Date |
-|---|---|---|
-| QA Lead | Manasa K | |
-| Dev Lead / Product Owner | Sai Rishi Gangarapu | |
-| Project Guide | Dr. Sapna V M | |
+| D-07 | High (security, DoS) | fuzz, TC-NFR-03 | The single-file reader reserved memory for the file size declared in the archive before checking it: a 300-byte archive declaring 16 EiB made `verify`/`extract` fail with out-of-memory (866 of 25,556 cases in the first fuzz run) | **Fixed**: the declared size must equal the sum of its blocks, each block may decode to at most 4096x its stored size (real maximum measured: 678x), and at most 64 MiB is reserved up front |
+| D-08 | High (security) | code review prompted by D-07 | For Huffman blocks, `Codec::decode` read the 8-byte size at payload offset 256 without checking the payload was that long (out-of-bounds read), then reserved that size unchecked | **Fixed**: length checked first; a payload of n bytes may declare at most 8n symbols |
+| D-09 | Medium (security) | code review prompted by D-07 | The folder reader checked `offset + length > limit` without overflow protection, so a wrapped sum could pass | **Fixed**: overflow-safe comparison, plus the same 4096x rule |
+| D-10 | Low | fuzz, TC-NFR-03 | The footer's header-offset field is outside the archive SHA-256 and was never checked, so an archive with that field damaged was accepted (content still correct) | **Fixed**: both readers require 0, the value the writers always store |
+| D-11 | Low | fuzz under UBSan | `sha256_feed` passed a null pointer to `memcpy` for empty input (undefined behaviour even for 0 bytes) | **Fixed**: returns early for empty input |
+| D-12 | Low (hardening) | fuzz, re-sealed archives | A deliberately rewritten archive can restore files under names that are not valid UTF-8 (always inside the destination; contents unchanged). The SAD specifies UTF-8 paths | **Open**: reject non-UTF-8 and control characters in recorded paths |

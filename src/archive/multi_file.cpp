@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 
 #include "archive/archive_binary.hpp"
@@ -267,6 +268,11 @@ ArchivedTree MultiFileArchiveReader::read(
             "The archive has no integrity footer: it is not a valid "
             "UATC archive or was written by an unsupported version.");
     }
+    // Not covered by the archive SHA-256, so checked explicitly: the writer
+    // always puts the header at offset 0 (found by the fuzz test).
+    if (read_u64(size - FOOTER_SIZE) != 0) {
+        throw std::runtime_error("Invalid header offset in the archive footer.");
+    }
 
     const auto archive_digest = core::sha256(raw, size - INTEGRITY_REGION_SIZE);
     for (std::size_t i = 0; i < ARCHIVE_SHA256_SIZE; ++i) {
@@ -354,9 +360,19 @@ ArchivedTree MultiFileArchiveReader::read(
         if (transform_parameter != 0) {
             throw std::runtime_error("Unsupported transform parameter.");
         }
+        // Overflow-safe: offset + length is never computed before both are
+        // known to fit (a wrapped sum would pass a plain comparison).
+        const std::uint64_t payload_limit = size - INTEGRITY_REGION_SIZE;
         if (block_payload_offset < payload_offset ||
-            block_payload_offset + stored_length > size - INTEGRITY_REGION_SIZE) {
+            block_payload_offset > payload_limit ||
+            stored_length > payload_limit - block_payload_offset) {
             throw std::runtime_error("Block payload extends beyond archive.");
+        }
+        // Same plausibility rule as the single-file reader (TC-SEC-02).
+        if (stored_length < std::numeric_limits<std::uint64_t>::max() / 4096 - 1 &&
+            original_length > (stored_length + 1) * 4096) {
+            throw std::runtime_error(
+                "Block declares more data than its payload can hold.");
         }
 
         const std::vector<std::uint8_t> stored(

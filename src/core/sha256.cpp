@@ -75,6 +75,10 @@ Sha256State sha256_begin() {
 }
 
 void sha256_feed(Sha256State& state, const std::uint8_t* data, std::size_t n) {
+    // Nothing to hash. Also keeps an empty input's null data pointer away
+    // from memcpy, which is undefined behaviour even for 0 bytes
+    // (found by the UBSan fuzz run, TC-NFR-03).
+    if (n == 0) return;
     state.total_bits += static_cast<std::uint64_t>(n) * 8;
 
     // Fill the partial block first.

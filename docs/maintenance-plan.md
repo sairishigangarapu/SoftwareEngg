@@ -94,7 +94,7 @@ Old archives are user data and must stay readable.
 
 | When | What runs |
 |---|---|
-| Every push (Jenkins) | build, all C++ suites, coverage gate, Selenium UI suite, SonarCloud |
+| Every push (Jenkins) | build, all C++ suites, fuzz test under sanitizers, coverage gate, Selenium UI suite, SonarCloud |
 | Before merging a core/archive change | plus `scripts/system_validation.sh` |
 | Before a release / demo | everything above, plus a clean clone build (`git clone`, `make all`, `make test`), plus the 15-minute demo dry run (`docs/demo-script.md`) |
 | Weekly | ThreadSanitizer build of the thread pool, parallel and API tests |
@@ -110,7 +110,10 @@ Old archives are user data and must stay readable.
   recomputed checksum.
 - SonarCloud security findings are fixed, not accepted, unless the owner
   documents why in the PR.
-- Planned: a mutation fuzzer for the archive reader (TC-NFR-03).
+- The archive-reader fuzz test (`make fuzz`, TC-NFR-03) runs in CI under
+  AddressSanitizer + UBSan. Any change to a reader, codec or transform
+  decoder must keep it green; a failing input is saved as
+  `uatc_fuzz_test_dir/failure_N.uatc` and becomes a regression fixture.
 
 ## 9. Toolchain and dependency updates
 
@@ -139,7 +142,7 @@ UATC has no third-party runtime libraries. Tooling:
 |---|---|---|---|
 | Enable assertions in `make test` and fix the 7 failing core assertions | Corrective (High) | Sai Rishi | D-03 |
 | Store empty directories in folder archives | Corrective (Medium) | S Chakshu | D-04 |
-| Archive reader fuzzer under ASan/UBSan | Preventive | Manasa | TC-NFR-03 |
+| Reject non-UTF-8 and control characters in recorded paths | Preventive | S Chakshu | D-12 |
 | Dummy-transform test (add a transform without touching other layers) | Preventive | Sai Rishi | TC-NFR-05 |
 | Docker and Windows test runs | Adaptive | Sampada | TC-NFR-06 |
 | Benchmark results screen in the web UI (needs an API endpoint) | Perfective | Manasa | Execution plan, Day 17 |
