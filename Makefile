@@ -77,6 +77,7 @@ CHAKSHU_TESTS = \
 
 MANASA_TESTS = \
 	tests/core/archive_service_test \
+	tests/fuzz/archive_fuzz_test \
 	tests/archive_inspector_test \
 	tests/archive_verifier_test \
 	tests/integration_roundtrip_test
@@ -93,7 +94,7 @@ CLI_BIN = build/uatc_cli
 PC_BENCH = pcomp/build/pc_bench
 
 # ---- Default target ----
-.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests server-tests ui-test coverage
+.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests server-tests ui-test coverage fuzz
 
 all: $(ALL_TESTS) $(PC_BENCH) $(CLI_BIN)
 
@@ -192,6 +193,12 @@ tests/mixed_transform_test: tests/mixed_transform_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Manasa's tests (inspection, verification, round-trip) ----
+# Archive-reader fuzz test (TC-NFR-03). In `make test` it runs the
+# exhaustive header pass plus 2,000 random cases; `make fuzz` runs it under
+# AddressSanitizer + UBSan with 20,000 random cases.
+tests/fuzz/archive_fuzz_test: tests/fuzz/archive_fuzz_test.cpp tests/fuzz/fuzz_target.hpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) -Itests/fuzz $< $(CORE_OBJS) -o $@ -pthread
+
 tests/core/archive_service_test: tests/core/archive_service_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@ -pthread
 
@@ -224,6 +231,19 @@ test: $(ALL_TESTS)
 ui-test: $(CLI_BIN)
 	python3 -m pytest tests/ui -v
 
+# ---- Fuzzing under sanitizers (STP TC-NFR-03) ----
+# Separate binary: the whole library rebuilt with ASan + UBSan, so memory
+# errors that would not crash a normal build stop the run.
+FUZZ_BIN = build/archive_fuzz_asan
+FUZZ_CASES ?= 20000
+fuzz:
+	mkdir -p build
+	$(CXX) -std=c++17 -O1 -g -fno-omit-frame-pointer \
+		-fsanitize=address,undefined -fno-sanitize-recover=undefined \
+		-Iinclude -Itests/fuzz tests/fuzz/archive_fuzz_test.cpp $(CORE_SRCS) \
+		-o $(FUZZ_BIN) -pthread
+	UATC_FUZZ_CASES=$(FUZZ_CASES) ./$(FUZZ_BIN)
+
 # ---- Line and branch coverage (STP exit criterion) ----
 # Builds separately in build-cov/ with CMake; needs gcovr.
 coverage:
@@ -249,4 +269,4 @@ clean:
 	rm -f $(CORE_OBJS) build/libuatc_core.a
 	rm -f $(ALL_TESTS)
 	rm -f $(PC_BENCH)
-	rm -f $(CLI_BIN)
+	rm -f $(CLI_BIN) $(FUZZ_BIN)

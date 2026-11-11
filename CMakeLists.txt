@@ -293,6 +293,12 @@ if(BUILD_TESTING)
     target_link_libraries(core_archive_service_test PRIVATE uatc_core Threads::Threads)
     add_test(NAME core_archive_service_tests COMMAND core_archive_service_test)
 
+    # Archive-reader fuzz test (TC-NFR-03); `make fuzz` runs it under ASan.
+    add_executable(archive_fuzz_test tests/fuzz/archive_fuzz_test.cpp)
+    target_include_directories(archive_fuzz_test PRIVATE ${PROJECT_SOURCE_DIR}/tests/fuzz)
+    target_link_libraries(archive_fuzz_test PRIVATE uatc_core Threads::Threads)
+    add_test(NAME archive_fuzz_tests COMMAND archive_fuzz_test)
+
     add_executable(server_api_test
         tests/server/api_test.cpp
     )
@@ -331,6 +337,7 @@ if(BUILD_TESTING)
         core_multi_file_tests
         core_dir_cli_tests
         core_archive_service_tests
+        archive_fuzz_tests
         server_api_tests
         integration_roundtrip_tests
         PROPERTIES

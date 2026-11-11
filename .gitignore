@@ -42,6 +42,8 @@ tests/core/integrity_test
 tests/core/planner_test
 tests/core/archive_service_test
 tests/server/api_test
+tests/fuzz/archive_fuzz_test
+uatc_fuzz_test_dir/
 # Coverage build and Python test tooling
 build-cov/
 .venv/
