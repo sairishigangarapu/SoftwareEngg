@@ -7,10 +7,10 @@
 // TC-INT-01  a flipped payload byte -> E_BLOCK_CHECKSUM from the verifier
 // TC-ERR-03  a non-archive -> E_MALFORMED_ARCHIVE from the verifier
 // TC-PAR-01  the folder archive is byte-identical for 1 and 4 workers
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -100,9 +100,16 @@ int main() {
         write_text(tree / "logs" / "deep" / "app.log", log);
     }
     {
+        // Incompressible-looking bytes from a fixed integer hash: the test
+        // only needs data the probe stores as-is, not real randomness.
         std::vector<char> random(70000);
-        std::mt19937 rng(7);
-        for (auto& c : random) c = static_cast<char>(rng());
+        std::uint32_t x = 2463534242u;
+        for (auto& c : random) {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            c = static_cast<char>(x >> 24);
+        }
         write_file(tree / "bin" / "random.bin", random);
     }
 

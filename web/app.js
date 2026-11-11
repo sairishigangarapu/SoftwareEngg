@@ -215,17 +215,26 @@ function mockNote(text) {
 }
 
 // Path helpers. The backend reports absolute POSIX paths.
+
+// Removes trailing '/' characters with a plain loop (a regex like /\/+$/
+// can backtrack badly on long runs of slashes).
+function stripTrailingSlashes(path) {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === '/') end--;
+  return path.slice(0, end);
+}
+
 function dirname(path) {
-  const trimmed = path.replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(path);
   const at = trimmed.lastIndexOf('/');
   return at <= 0 ? '/' : trimmed.slice(0, at);
 }
 function basename(path) {
-  const trimmed = path.replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(path);
   return trimmed.slice(trimmed.lastIndexOf('/') + 1);
 }
 function joinPath(dir, name) {
-  return dir.replace(/\/+$/, '') + '/' + name;
+  return stripTrailingSlashes(dir) + '/' + name;
 }
 
 // The plain-language text for any failure object (TC-UI-04).
@@ -277,7 +286,7 @@ async function mockApi(method, path, body) {
     if (!dir.startsWith(MOCK_ROOT)) {
       throw { code: 'E_PERMISSION' };
     }
-    const entries = MOCK_FS[dir.replace(/\/+$/, '')];
+    const entries = MOCK_FS[stripTrailingSlashes(dir)];
     if (!entries) throw { code: 'E_NOT_FOUND' };
     return { path: dir, root: MOCK_ROOT, entries };
   }
@@ -478,7 +487,7 @@ $('source').addEventListener('change', () => {
   const source = $('source').value.trim();
   if (!source || $('destination').value.trim()) return;
   if (operation === 'compress') {
-    $('destination').value = source.replace(/\/+$/, '') + '.uatc';
+    $('destination').value = stripTrailingSlashes(source) + '.uatc';
   } else if (operation === 'extract') {
     $('destination').value = joinPath(dirname(source),
       basename(source).replace(/\.uatc$/i, '') + '_restored');
@@ -530,7 +539,9 @@ function readForm() {
 
 $('select-form').addEventListener('submit', event => {
   event.preventDefault();
-  start();
+  // start() handles its own errors (it shows the error screen), so the
+  // returned promise is deliberately not awaited here.
+  void start();
 });
 $('btn-browse-source').addEventListener('click', () =>
   openBrowser($('source'), OPERATIONS[operation].sourceKind));
