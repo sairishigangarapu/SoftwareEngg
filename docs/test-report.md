@@ -14,6 +14,7 @@ section 14 (metrics), Appendix A (test cases).
 | Same suites through CTest | `cmake -S . -B build && cmake --build build && ctest --test-dir build` | per-suite pass/fail |
 | Line and branch coverage | `scripts/coverage.sh` (needs `pip install gcovr`) | `build-cov/coverage/index.html`, `summary.txt`, `summary.json` |
 | Selenium UI tests | `make cli && pip install -r tests/ui/requirements.txt && python3 -m pytest tests/ui -v` | 17 tests |
+| Fuzz test under sanitizers (TC-NFR-03) | `make fuzz` | `PASS` lines and a verdict histogram |
 | Thread-safety check (TC-PAR-02) | build `tests/server/api_test.cpp` with `-fsanitize=thread` | no reports |
 
 ## 2. Results summary
@@ -24,6 +25,7 @@ section 14 (metrics), Appendix A (test cases).
 | API suite (`tests/server/api_test.cpp`) | 80 checks | all pass (one check, the read-only folder, runs only as a non-root user); clean under ThreadSanitizer |
 | Folder-archive facade (`tests/core/archive_service_test.cpp`) | 29 checks | all pass |
 | Selenium UI suite (`tests/ui/test_ui.py`) | 17 tests | all pass, 3 consecutive runs (no flakiness) |
+| Archive-reader fuzz test (`make fuzz`) | 45,250 damaged archives | all handled correctly under AddressSanitizer + UBSan |
 
 ## 3. Coverage (gcov + gcovr)
 
@@ -89,8 +91,8 @@ The STP target is **>= 80% lines and >= 70% branches on core modules**.
   E_ARCHIVE_CHECKSUM, E_INTERNAL) are never raised by a test. A table-driven
   test over every `ErrorCode` would close this.
 - **Archive reader/inspector bounds checks (64-67% branches)**: each
-  malformed-header case is its own branch; the planned fuzz test
-  (TC-NFR-03) is the efficient way to reach them.
+  malformed-header case is its own branch. The fuzz test (TC-NFR-03) now
+  drives them; it is not included in the coverage run yet.
 - **src/filesystem (61.5% branches)**: permission-denied and unreadable-file
   paths need a non-root test run (root ignores permission bits).
 - **sha256.cpp (60% branches)**: the multi-chunk streaming paths need inputs

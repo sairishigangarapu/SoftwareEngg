@@ -75,8 +75,9 @@ only see the folder given with `--root`. Without a backend, open
 | Selenium UI tests | `pip install -r tests/ui/requirements.txt && make ui-test` | 17 pass |
 | Line and branch coverage | `make coverage` | core 91.0% lines, 81.1% branches |
 | System validation (corpus, damage, security, performance) | `scripts/system_validation.sh` | all checks pass |
+| Archive-reader fuzzing under ASan/UBSan | `make fuzz` | 45,250 damaged archives, all handled |
 | Static analysis | SonarCloud quality gate on every PR | |
-| CI | `Jenkinsfile`: build, test, coverage, UI tests, SonarQube, benchmark, demo | |
+| CI | `Jenkinsfile`: build, test, fuzz, coverage, UI tests, SonarQube, benchmark, demo | |
 
 Reports: `docs/test-report.md` (unit results and coverage),
 `docs/validation-report.md` (every STP test case, performance, defects),

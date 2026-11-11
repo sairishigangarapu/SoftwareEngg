@@ -147,7 +147,9 @@ clean.
    curl -s http://127.0.0.1:8080/api/fs/list
    ```
    -> 403 "Missing or wrong X-UATC-Token header" (TC-SEC-03).
-3. Quality gates: the PR page on GitHub with the SonarCloud gate, the
+3. Fuzzing: `make fuzz` (about a minute) - 45,250 damaged archives under
+   AddressSanitizer and UBSan, all handled.
+4. Quality gates: the PR page on GitHub with the SonarCloud gate, the
    coverage numbers (core 91.0% lines, 81.1% branches), and the Selenium
    suite running:
    ```bash
@@ -157,9 +159,10 @@ clean.
 ## F. Validation and maintenance (Manasa, 1.5 min)
 
 - `docs/rtm.md`: every requirement traced to design, code and tests.
-- `docs/validation-report.md`: 49 STP cases, 38 pass, 8 partial, 3 not
-  run; the defects we found and fixed (D-01, D-05, D-06) and the two still
-  open (D-03, D-04). "We report what is not done as clearly as what is."
+- `docs/validation-report.md`: 49 STP cases, 39 pass, 8 partial, 2 not
+  run; 12 defects found by our own tests (9 fixed), including what the fuzz
+  test found: a 300-byte archive could demand exabytes of memory (D-07).
+  "We report what is not done as clearly as what is."
 - `docs/maintenance-plan.md`: ownership, CI gates, archive-compatibility
   rule (IDs never reused), backlog.
 - Close: "a correct, measured, adaptive compressor, with every SDLC stage
@@ -174,4 +177,5 @@ clean.
 | What if two workers finish out of order? | Sampada | Results land in a pre-sized vector by block index; the writer emits in order; 1 vs 8 workers byte-identical |
 | How is the web UI protected? | Manasa | Loopback only, per-session token, Origin and Host checks, allowed-folder path rule, strict input parsing |
 | Why is text compression lower than gzip? | Sai Rishi | No LZ match finding yet; stated in the SRS as not a goal; listed as future work |
-| What is not finished? | Manasa | D-03, D-04, fuzzing, dummy-transform test, second-OS run (validation report section 6) |
+| What is not finished? | Manasa | D-03, D-04, dummy-transform test, second-OS run (validation report section 6) |
+| How did you test against malicious archives? | Manasa | The fuzz test: 45,250 damaged and re-sealed archives under sanitizers; it found a memory-exhaustion bug (D-07) that we fixed |
