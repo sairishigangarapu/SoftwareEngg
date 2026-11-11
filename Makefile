@@ -93,7 +93,7 @@ CLI_BIN = build/uatc_cli
 PC_BENCH = pcomp/build/pc_bench
 
 # ---- Default target ----
-.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests server-tests
+.PHONY: all bench test clean cli pc_bench run-bench core-tests chakshu-tests manasa-tests server-tests ui-test coverage
 
 all: $(ALL_TESTS) $(PC_BENCH) $(CLI_BIN)
 
@@ -218,6 +218,16 @@ test: $(ALL_TESTS)
 		./$$t || exit 1; \
 	done
 	@echo "ALL TESTS PASSED"
+
+# ---- Selenium UI tests (STP TC-UI-01..05) ----
+# Needs Chrome and the Python packages in tests/ui/requirements.txt.
+ui-test: $(CLI_BIN)
+	python3 -m pytest tests/ui -v
+
+# ---- Line and branch coverage (STP exit criterion) ----
+# Builds separately in build-cov/ with CMake; needs gcovr.
+coverage:
+	scripts/coverage.sh
 
 # ---- pcomp benchmark ----
 $(PC_BENCH): pcomp/src/block_loop.cpp pcomp/src/thread_pool.cpp pcomp/bench/bench_main.cpp
