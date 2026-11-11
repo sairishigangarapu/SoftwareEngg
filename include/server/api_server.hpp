@@ -58,6 +58,7 @@ struct Job {
     core::ErrorCode error = core::ErrorCode::Internal;
     std::string error_message;      // technical detail, for logs and devs
     // The result fields, filled on completion.
+    std::uint64_t files = 0;
     std::uint64_t originalBytes = 0;
     std::uint64_t archiveBytes = 0;
     double ratio = 0.0;
@@ -78,10 +79,7 @@ const char* user_message(core::ErrorCode code);
 // The HTTP status for a request-level error (SAD 4.3.4, HTTP column).
 int http_status_for(core::ErrorCode code);
 
-// Maps any exception thrown by the core, the archive layer or the
-// filesystem to its SAD error code. The archive layer still throws
-// std::runtime_error for format problems, so those are classified by
-// message; everything unrecognised there is E_MALFORMED_ARCHIVE.
+// Same as core::classify_exception (kept for the API layer's callers).
 core::ErrorCode classify_error(const std::exception& error);
 
 // {"error":{"code":..., "message":..., "userMessage":...}}

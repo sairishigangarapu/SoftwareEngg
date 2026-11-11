@@ -1,10 +1,10 @@
-
 #include "archive/archive_verifier.hpp"
 
 #include <exception>
 
 #include "archive/archive_inspector.hpp"
 #include "archive/archive_reader.hpp"
+#include "archive/multi_file.hpp"
 
 namespace uatc {
 
@@ -21,14 +21,21 @@ VerificationResult ArchiveVerifier::verify(
         result.blocksChecked = info.blockCount;
 
         // Reading reconstructs the original bytes and validates each
-        // block's decoded length and checksum.
-        (void)ArchiveReader::read(archive_path);
+        // block's decoded length and checksum, then the integrity data.
+        // A folder archive goes through the multi-file reader, which
+        // checks the same things for every file.
+        if (info.fileCount > 1) {
+            (void)MultiFileArchiveReader::read(archive_path);
+        } else {
+            (void)ArchiveReader::read(archive_path);
+        }
 
         result.success = true;
         result.message = "Archive verification successful.";
     } catch (const std::exception& error) {
         result.success = false;
         result.message = error.what();
+        result.code = core::classify_exception(error);
     }
 
     return result;

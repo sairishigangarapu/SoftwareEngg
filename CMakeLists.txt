@@ -35,6 +35,7 @@ add_library(uatc_core
     src/core/compressibility_probe.cpp
     src/core/transform_selector.cpp
     src/core/compressor.cpp
+    src/core/archive_service.cpp
     src/core/error.cpp
     src/core/planner.cpp
     src/core/crc32.cpp
@@ -286,6 +287,12 @@ if(BUILD_TESTING)
     add_test(NAME core_dir_cli_tests COMMAND core_dir_cli_test)
 
     find_package(Threads REQUIRED)
+    add_executable(core_archive_service_test
+        tests/core/archive_service_test.cpp
+    )
+    target_link_libraries(core_archive_service_test PRIVATE uatc_core Threads::Threads)
+    add_test(NAME core_archive_service_tests COMMAND core_archive_service_test)
+
     add_executable(server_api_test
         tests/server/api_test.cpp
     )
@@ -323,6 +330,7 @@ if(BUILD_TESTING)
         core_huffman_tests
         core_multi_file_tests
         core_dir_cli_tests
+        core_archive_service_tests
         server_api_tests
         integration_roundtrip_tests
         PROPERTIES

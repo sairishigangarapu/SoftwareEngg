@@ -28,6 +28,7 @@ struct CompressResult {
     std::uint64_t storedBlocks = 0;
     std::uint64_t compressedBlocks = 0;
     double ratio = 0.0;  // original / archive; below 1.0 means it grew
+    std::uint64_t fileCount = 1;  // files in the archive (folder: several)
     std::map<TransformId, std::uint64_t> transformUsage;
 };
 // Options live in core/config.hpp alongside the block-size default; the

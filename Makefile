@@ -20,6 +20,7 @@ CORE_SRCS = \
 	src/core/compressibility_probe.cpp \
 	src/core/transform_selector.cpp \
 	src/core/compressor.cpp \
+	src/core/archive_service.cpp \
 	src/core/error.cpp \
 	src/core/planner.cpp \
 	src/core/crc32.cpp \
@@ -75,6 +76,7 @@ CHAKSHU_TESTS = \
 	tests/mixed_transform_test
 
 MANASA_TESTS = \
+	tests/core/archive_service_test \
 	tests/archive_inspector_test \
 	tests/archive_verifier_test \
 	tests/integration_roundtrip_test
@@ -190,6 +192,9 @@ tests/mixed_transform_test: tests/mixed_transform_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Manasa's tests (inspection, verification, round-trip) ----
+tests/core/archive_service_test: tests/core/archive_service_test.cpp build/libuatc_core.a
+	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@ -pthread
+
 tests/archive_inspector_test: tests/archive_inspector_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 

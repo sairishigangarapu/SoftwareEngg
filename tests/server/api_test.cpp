@@ -479,6 +479,38 @@ int main() {
               "FR-11: info on a missing file -> 404");
     }
 
+    // ======================================= UC-1: a folder via the API
+    {
+        write_file(root / "project" / "a.txt", "alpha alpha alpha alpha\n");
+        write_file(root / "project" / "src" / "b.txt", std::string(9000, 'b'));
+        const auto r = post("/api/jobs/compress",
+                            "{\"source\":\"project\",\"destination\":\"project.uatc\"}");
+        const auto job = poll(field(body_of(r), "jobId"));
+        check(field(job, "state") == "completed" && has(job, "\"files\":2"),
+              "UC-1: folder compress job completes with 2 files", job);
+
+        const auto info = body_of(get("/api/archives/info?path=project.uatc"));
+        check(has(info, "\"fileCount\":2") &&
+                  has(info, "{\"path\":\"a.txt\"") &&
+                  has(info, "{\"path\":\"src/b.txt\"") &&
+                  has(info, "\"filesTruncated\":false"),
+              "FR-11: info lists the files of a folder archive", info);
+
+        const auto v = poll(field(body_of(post("/api/jobs/verify",
+                                               "{\"archive\":\"project.uatc\"}")),
+                                  "jobId"));
+        check(field(v, "state") == "completed" && has(v, "\"valid\":true"),
+              "TC-VER-01: folder archive verifies through the API", v);
+
+        const auto x = poll(field(body_of(post("/api/jobs/extract",
+                                               "{\"archive\":\"project.uatc\","
+                                               "\"destination\":\"project_out\"}")),
+                                  "jobId"));
+        check(field(x, "state") == "completed" && has(x, "\"files\":2") &&
+                  fs::exists(root / "project_out" / "src" / "b.txt"),
+              "UC-1: folder archive extracts through the API", x);
+    }
+
     // ================================================== misc
     {
         const auto r = get("/api/jobs/j-9999");

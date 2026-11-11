@@ -18,7 +18,8 @@
 #include <system_error>
 
 #include "archive/archive_inspector.hpp"
-#include "archive/archive_reader.hpp"
+#include "archive/archive_verifier.hpp"
+#include "core/archive_service.hpp"
 #include "core/config.hpp"
 
 namespace uatc::server {
@@ -90,55 +91,8 @@ int http_status_for(ErrorCode code) {
     }
 }
 
-namespace {
-
-bool contains_ci(const std::string& haystack, const char* needle) {
-    std::string h = haystack;
-    std::string n = needle;
-    for (auto& c : h) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    for (auto& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return h.find(n) != std::string::npos;
-}
-
-}  // namespace
-
 ErrorCode classify_error(const std::exception& error) {
-    if (const auto* uatc_error = dynamic_cast<const UatcError*>(&error)) {
-        return uatc_error->code();
-    }
-    if (const auto* fs_error = dynamic_cast<const fs::filesystem_error*>(&error)) {
-        const auto code = fs_error->code();
-        if (code == std::errc::permission_denied ||
-            code == std::errc::operation_not_permitted ||
-            code == std::errc::read_only_file_system) {
-            return ErrorCode::Permission;
-        }
-        if (code == std::errc::no_such_file_or_directory) {
-            return ErrorCode::NotFound;
-        }
-        return ErrorCode::Io;
-    }
-    if (dynamic_cast<const std::bad_alloc*>(&error) != nullptr) {
-        return ErrorCode::Internal;
-    }
-
-    // The archive layer reports format problems as std::runtime_error with
-    // fixed messages (src/archive/archive_reader.cpp, multi_file.cpp).
-    const std::string message = error.what();
-    if (contains_ci(message, "block checksum")) return ErrorCode::BlockChecksum;
-    if (contains_ci(message, "checksum mismatch")) return ErrorCode::ArchiveChecksum;
-    // Exact message only: "has no integrity footer ... unsupported
-    // version" is a damaged or foreign file, not a newer archive.
-    if (contains_ci(message, "unsupported uatc archive version")) {
-        return ErrorCode::UnsupportedVersion;
-    }
-    if (contains_ci(message, "does not exist")) return ErrorCode::NotFound;
-    if (contains_ci(message, "could not open") ||
-        contains_ci(message, "failed to open") ||
-        contains_ci(message, "failed to write")) {
-        return ErrorCode::Io;
-    }
-    return ErrorCode::MalformedArchive;
+    return core::classify_exception(error);
 }
 
 namespace {
@@ -367,10 +321,11 @@ std::string JobManager::submit_compress(const fs::path& source,
             std::string id_;
         } sink(*this, id);
 
-        const auto result =
-            core::CompressionManager::compress(source, archive, options, &sink);
+        // A file or a whole folder (UC-1), through the core facade.
+        const auto result = core::compress_path(source, archive, options, &sink);
 
         update(id, [&result](Job& job) {
+            job.files = result.fileCount;
             job.originalBytes = result.originalBytes;
             job.archiveBytes = result.archiveBytes;
             job.ratio = result.ratio;
@@ -392,9 +347,10 @@ std::string JobManager::submit_extract(const fs::path& archive,
     const std::string id = create("extract");
     launch(id, [this, id, archive, destination] {
         check_writable_directory_destination(destination);
-        const auto result =
-            core::CompressionManager::extract(archive, destination);
+        // Single-file and folder archives alike.
+        const auto result = core::extract_path(archive, destination);
         update(id, [&result](Job& job) {
+            job.files = result.files;
             job.originalBytes = result.bytesWritten;
         });
     });
@@ -404,9 +360,15 @@ std::string JobManager::submit_extract(const fs::path& archive,
 std::string JobManager::submit_verify(const fs::path& archive) {
     const std::string id = create("verify");
     launch(id, [this, id, archive] {
+        // Full decode with every CRC32 and the SHA-256 integrity data,
+        // single-file or folder archive; the verifier classifies failures.
+        const auto verdict = uatc::ArchiveVerifier::verify(archive);
+        if (!verdict.success) {
+            throw UatcError(verdict.code, verdict.message);
+        }
         const auto info = uatc::ArchiveInspector::inspect(archive);
-        (void)uatc::ArchiveReader::read(archive);  // full decode + checksums
         update(id, [&info](Job& job) {
+            job.files = info.fileCount;
             job.originalBytes = info.originalBytes;
             job.archiveBytes = info.archiveBytes;
             job.blocks = info.blockCount;
@@ -819,6 +781,7 @@ std::string job_json(const Job& job) {
           << ",\"ratio\":" << job.ratio
           << ",\"elapsedMs\":" << job.elapsedMs
           << ",\"throughputMBps\":" << throughput
+          << ",\"files\":" << job.files
           << ",\"blocks\":" << job.blocks
           << ",\"stored\":" << job.storedBlocks;
         if (job.operation == "verify") o << ",\"valid\":true";
@@ -860,7 +823,18 @@ std::string info_json(const ArchiveInfo& info, const fs::path& path) {
           << ",\"name\":\"" << json_escape(c.name)
           << "\",\"blocks\":" << c.blocks << "}";
     }
-    o << "]}";
+    // The file list, capped so a huge archive cannot produce a huge reply.
+    constexpr std::size_t kMaxListedFiles = 500;
+    o << "],\"files\":[";
+    const std::size_t listed = std::min(info.files.size(), kMaxListedFiles);
+    for (std::size_t i = 0; i < listed; ++i) {
+        const auto& f = info.files[i];
+        o << (i ? "," : "") << "{\"path\":\"" << json_escape(f.path)
+          << "\",\"originalBytes\":" << f.originalBytes
+          << ",\"blocks\":" << f.blocks << "}";
+    }
+    o << "],\"filesTruncated\":"
+      << (info.files.size() > listed ? "true" : "false") << "}";
     return o.str();
 }
 
