@@ -42,6 +42,17 @@ pipeline {
             }
         }
 
+        stage('System validation') {
+            // STP system, performance and security cases on a generated
+            // corpus (scripts/system_validation.sh): round trips, damaged
+            // archives, path traversal, absurd sizes, single core, an
+            // unreadable input as an unprivileged user, 20 repeated
+            // parallel runs. One PASS/FAIL line per check in the log.
+            steps {
+                sh 'make cli && scripts/system_validation.sh'
+            }
+        }
+
         stage('Fuzz (ASan/UBSan)') {
             // TC-NFR-03: 20,000 random damaged archives plus an exhaustive
             // header pass, with the library built under AddressSanitizer and
