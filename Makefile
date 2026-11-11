@@ -67,20 +67,20 @@ CORE_TESTS = \
 	tests/core/integrity_test
 
 CHAKSHU_TESTS = \
-	tests/filesystem_test \
-	tests/archive_binary_test \
-	tests/block_test \
-	tests/archive_writer_test \
-	tests/archive_reader_test \
-	tests/transform_codec_test \
-	tests/mixed_transform_test
+	tests/filesystem/filesystem_test \
+	tests/archive/archive_binary_test \
+	tests/archive/block_test \
+	tests/archive/archive_writer_test \
+	tests/archive/archive_reader_test \
+	tests/archive/transform_codec_test \
+	tests/archive/mixed_transform_test
 
 MANASA_TESTS = \
 	tests/core/archive_service_test \
 	tests/fuzz/archive_fuzz_test \
-	tests/archive_inspector_test \
-	tests/archive_verifier_test \
-	tests/integration_roundtrip_test
+	tests/archive/archive_inspector_test \
+	tests/archive/archive_verifier_test \
+	tests/integration/integration_roundtrip_test
 
 SERVER_TESTS = \
 	tests/server/api_test
@@ -171,25 +171,25 @@ tests/core/integrity_test: tests/core/integrity_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Chakshu's tests ----
-tests/filesystem_test: tests/filesystem_test.cpp build/libuatc_core.a
+tests/filesystem/filesystem_test: tests/filesystem/filesystem_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/archive_binary_test: tests/archive_binary_test.cpp build/libuatc_core.a
+tests/archive/archive_binary_test: tests/archive/archive_binary_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/block_test: tests/block_test.cpp build/libuatc_core.a
+tests/archive/block_test: tests/archive/block_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/archive_writer_test: tests/archive_writer_test.cpp build/libuatc_core.a
+tests/archive/archive_writer_test: tests/archive/archive_writer_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/archive_reader_test: tests/archive_reader_test.cpp build/libuatc_core.a
+tests/archive/archive_reader_test: tests/archive/archive_reader_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/transform_codec_test: tests/transform_codec_test.cpp build/libuatc_core.a
+tests/archive/transform_codec_test: tests/archive/transform_codec_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/mixed_transform_test: tests/mixed_transform_test.cpp build/libuatc_core.a
+tests/archive/mixed_transform_test: tests/archive/mixed_transform_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- Manasa's tests (inspection, verification, round-trip) ----
@@ -202,13 +202,13 @@ tests/fuzz/archive_fuzz_test: tests/fuzz/archive_fuzz_test.cpp tests/fuzz/fuzz_t
 tests/core/archive_service_test: tests/core/archive_service_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@ -pthread
 
-tests/archive_inspector_test: tests/archive_inspector_test.cpp build/libuatc_core.a
+tests/archive/archive_inspector_test: tests/archive/archive_inspector_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/archive_verifier_test: tests/archive_verifier_test.cpp build/libuatc_core.a
+tests/archive/archive_verifier_test: tests/archive/archive_verifier_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
-tests/integration_roundtrip_test: tests/integration_roundtrip_test.cpp build/libuatc_core.a
+tests/integration/integration_roundtrip_test: tests/integration/integration_roundtrip_test.cpp build/libuatc_core.a
 	$(CXX) $(CXXFLAGS) $< $(CORE_OBJS) -o $@
 
 # ---- CLI executable (info / verify) ----

@@ -63,7 +63,7 @@ add_executable(uatc
 target_link_libraries(uatc PRIVATE uatc_core)
 # Day 4 integration round-trip test
 add_executable(integration_roundtrip_test
-    tests/integration_roundtrip_test.cpp
+    tests/integration/integration_roundtrip_test.cpp
 )
 target_link_libraries(integration_roundtrip_test PRIVATE uatc_core)
 add_test(
@@ -79,7 +79,7 @@ if(BUILD_TESTING)
 
     # Filesystem tests
     add_executable(filesystem_test
-        tests/filesystem_test.cpp
+        tests/filesystem/filesystem_test.cpp
     )
     target_link_libraries(filesystem_test PRIVATE uatc_core)
     add_test(
@@ -89,7 +89,7 @@ if(BUILD_TESTING)
 
     # Archive binary tests
     add_executable(archive_binary_test
-        tests/archive_binary_test.cpp
+        tests/archive/archive_binary_test.cpp
     )
     target_link_libraries(archive_binary_test PRIVATE uatc_core)
     add_test(
@@ -99,7 +99,7 @@ if(BUILD_TESTING)
 
     # Block tests
     add_executable(block_test
-        tests/block_test.cpp
+        tests/archive/block_test.cpp
     )
     target_link_libraries(block_test PRIVATE uatc_core)
     add_test(
@@ -109,7 +109,7 @@ if(BUILD_TESTING)
 
     # Archive writer tests
     add_executable(archive_writer_test
-        tests/archive_writer_test.cpp
+        tests/archive/archive_writer_test.cpp
     )
     target_link_libraries(archive_writer_test PRIVATE uatc_core)
     add_test(
@@ -119,7 +119,7 @@ if(BUILD_TESTING)
 
     # Archive reader tests
     add_executable(archive_reader_test
-        tests/archive_reader_test.cpp
+        tests/archive/archive_reader_test.cpp
     )
     target_link_libraries(archive_reader_test PRIVATE uatc_core)
     add_test(
@@ -128,7 +128,7 @@ if(BUILD_TESTING)
     )
     # Archive inspector tests
     add_executable(archive_inspector_test
-        tests/archive_inspector_test.cpp
+        tests/archive/archive_inspector_test.cpp
     )
     target_link_libraries(archive_inspector_test PRIVATE uatc_core)
     add_test(
@@ -137,7 +137,7 @@ if(BUILD_TESTING)
     )
     # Archive verifier tests
     add_executable(archive_verifier_test
-        tests/archive_verifier_test.cpp
+        tests/archive/archive_verifier_test.cpp
     )
     target_link_libraries(archive_verifier_test PRIVATE uatc_core)
     add_test(
@@ -146,7 +146,7 @@ if(BUILD_TESTING)
     )
     # Transform and codec tests
     add_executable(transform_codec_test
-        tests/transform_codec_test.cpp
+        tests/archive/transform_codec_test.cpp
     )
     target_link_libraries(transform_codec_test PRIVATE uatc_core)
     add_test(
@@ -156,7 +156,7 @@ if(BUILD_TESTING)
 
     # Mixed raw/Delta transform tests
     add_executable(mixed_transform_test
-        tests/mixed_transform_test.cpp
+        tests/archive/mixed_transform_test.cpp
     )
     target_link_libraries(mixed_transform_test PRIVATE uatc_core)
     add_test(
