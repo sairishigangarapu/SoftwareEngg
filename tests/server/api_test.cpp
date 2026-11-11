@@ -415,12 +415,17 @@ int main() {
         // Permission bits are ignored for root, so only check them as a user.
         fs::create_directories(root / "locked");
         fs::permissions(root / "locked", fs::perms::owner_read | fs::perms::owner_exec);
-        const auto r = post("/api/jobs/compress",
-                            "{\"source\":\"sample.txt\","
-                            "\"destination\":\"locked/out.uatc\"}");
-        const auto job = poll(field(body_of(r), "jobId"));
-        check(field(job, "code") == "E_PERMISSION",
-              "TC-API-03: read-only folder -> E_PERMISSION", job);
+        // Some filesystems ignore permission bits. Skip if still writable.
+        if (::access((root / "locked").c_str(), W_OK) == 0) {
+            std::cout << "SKIP: TC-API-03 read-only folder (fs ignores perms)\n";
+        } else {
+            const auto r = post("/api/jobs/compress",
+                                "{\"source\":\"sample.txt\","
+                                "\"destination\":\"locked/out.uatc\"}");
+            const auto job = poll(field(body_of(r), "jobId"));
+            check(field(job, "code") == "E_PERMISSION",
+                  "TC-API-03: read-only folder -> E_PERMISSION", job);
+        }
         fs::permissions(root / "locked", fs::perms::owner_all);
     } else {
         std::cout << "SKIP: TC-API-03 read-only folder (running as root)\n";

@@ -10,6 +10,8 @@
 #include <cctype>
 #include <chrono>
 #include <cstring>
+#include <fcntl.h>
+#include <unistd.h>
 #include <fstream>
 #include <iomanip>
 #include <random>
@@ -251,11 +253,18 @@ void check_writable_file_destination(const fs::path& destination) {
                         "The destination cannot be written: " +
                             parent.string() + " is not a folder.");
     }
-    if (::access(parent.c_str(), W_OK) != 0 ||
-        (fs::exists(destination) && ::access(destination.c_str(), W_OK) != 0)) {
+    // ::access(W_OK) is not reliable on all filesystems: some mounts ignore
+    // permission bits or the process has DAC_OVERRIDE. Try to actually
+    // create and delete a temp file, which is the only reliable check.
+    const auto probe_file = parent / (".uatc_write_probe_" +
+                                      std::to_string(::getpid()));
+    int probe_fd = ::open(probe_file.c_str(), O_CREAT | O_WRONLY | O_EXCL, 0600);
+    if (probe_fd < 0) {
         throw UatcError(ErrorCode::Permission,
                         "No permission to write: " + destination.string());
     }
+    ::close(probe_fd);
+    ::unlink(probe_file.c_str());
 }
 
 void check_writable_directory_destination(const fs::path& destination) {
