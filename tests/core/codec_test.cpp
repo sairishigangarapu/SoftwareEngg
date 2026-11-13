@@ -28,7 +28,7 @@ int main() {
 
     // 2. Random data round-trip
     {
-        std::mt19937 rng(12345);
+        std::mt19937 rng(12345);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(10000);
 
         for (auto& b : data) {

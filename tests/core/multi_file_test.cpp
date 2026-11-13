@@ -58,7 +58,7 @@ int main() {
 
     std::vector<std::uint8_t> binary(70000);
     {
-        std::mt19937 rng(11);
+        std::mt19937 rng(11);  // NOSONAR - deterministic test data
         for (auto& b : binary) b = static_cast<std::uint8_t>(rng());
     }
 

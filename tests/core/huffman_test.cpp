@@ -38,7 +38,7 @@ int main() {
     // 3. Random data round-trips (Huffman will not shrink it - that is the
     //    selector's job, not the coder's).
     {
-        std::mt19937 rng(1);
+        std::mt19937 rng(1);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(20000);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         auto encoded = coder.encode(ByteSpan(data));
@@ -49,7 +49,7 @@ int main() {
     // 4. Skewed data compresses well below its size.
     {
         std::vector<std::uint8_t> data(50000);
-        std::mt19937 rng(2);
+        std::mt19937 rng(2);  // NOSONAR - deterministic test data
         for (auto& b : data) b = static_cast<std::uint8_t>((rng() % 32 == 0) ? rng() & 0xFF : 0x61);
         auto encoded = coder.encode(ByteSpan(data));
         auto decoded = coder.decode(ByteSpan(encoded.data), data.size());
@@ -83,7 +83,7 @@ int main() {
 
     // 7. Every length from 0 to 600 round-trips (bit-packing boundaries).
     {
-        std::mt19937 rng(3);
+        std::mt19937 rng(3);  // NOSONAR - deterministic test data
         for (std::size_t n = 0; n <= 600; ++n) {
             std::vector<std::uint8_t> data(n);
             for (auto& b : data) b = static_cast<std::uint8_t>(rng() & 0x0F);
@@ -96,7 +96,7 @@ int main() {
     // 8. Determinism: the same input, the same payload.
     {
         std::vector<std::uint8_t> data(3000);
-        std::mt19937 rng(4);
+        std::mt19937 rng(4);  // NOSONAR - deterministic test data
         for (auto& b : data) b = static_cast<std::uint8_t>(rng() % 5);
         auto a = coder.encode(ByteSpan(data));
         auto b = coder.encode(ByteSpan(data));

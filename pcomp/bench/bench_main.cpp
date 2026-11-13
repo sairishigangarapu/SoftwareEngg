@@ -32,8 +32,10 @@ int main(int argc, char** argv) {
   std::sort(workers.begin(), workers.end());
   workers.erase(std::unique(workers.begin(), workers.end()), workers.end());
 
-  fs::create_directories(fs::path(out).parent_path());
-  std::string tmp = fs::path(out).parent_path().string() + "/tmp";
+  fs::path out_dir = fs::path(out).parent_path();
+  if (out_dir.empty()) out_dir = ".";
+  fs::create_directories(out_dir);
+  std::string tmp = (out_dir / "scratch").string();
   fs::create_directories(tmp);
   std::ofstream os(out);
   os << env_json() << "\n";

@@ -58,7 +58,7 @@ int main() {
 
     // --- Random data ---
     {
-        std::mt19937 rng(2024);
+        std::mt19937 rng(2024);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(5000);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         round_trip(delta, data);

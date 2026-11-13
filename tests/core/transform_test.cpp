@@ -50,7 +50,7 @@ int main() {
 
     // 5. Random data (large)
     {
-        std::mt19937 rng(42);
+        std::mt19937 rng(42);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(10000);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         auto encoded = none.encode(ByteSpan(data));
