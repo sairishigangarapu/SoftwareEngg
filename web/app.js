@@ -480,6 +480,8 @@ function choose(op) {
 
   $('source').value = '';
   $('destination').value = '';
+  $('source-help').textContent =
+    'Type a path, press Browse, or Upload a file from your computer.';
   clearFormError();
   show('select');
 }
@@ -851,6 +853,11 @@ if (USE_MOCK) {
       $('source').value = data.path;
       $('destination').value = '';
       suggestDestination();
+      // The server never overwrites: a name that was taken gets " (1)" etc.
+      // Say so, so the user knows which file will be compressed.
+      $('source-help').textContent = data.renamed
+        ? `Uploaded. A file called "${file.name}" was already there, so this one was saved as "${data.name}".`
+        : `Uploaded as "${data.name}".`;
     } catch (error) {
       showError(error);
     } finally {
