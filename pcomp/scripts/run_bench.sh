@@ -13,7 +13,7 @@ else
   cd pcomp
   BENCH_BIN="./build/pc_bench"
 fi
-[ -f datasets/manifest.json ] || python3 scripts/make_samples.py
+[[ -f datasets/manifest.json ]] || python3 scripts/make_samples.py
 ./scripts/env_sheet.sh results/env.md
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 ./${BENCH_BIN} --root datasets/samples --out "results/bench_${STAMP}.jsonl" \
