@@ -538,6 +538,9 @@ int main() {
                   read_text(root / "notes (1).txt") == "second",
               "upload: same name again -> saved as 'notes (1).txt', original untouched",
               body_of(second));
+        const auto mode = fs::status(root / "notes.txt").permissions();
+        check((mode & (fs::perms::group_all | fs::perms::others_all)) == fs::perms::none,
+              "upload: stored file is readable by its owner only (mode 0600)");
         const auto third = post(up + "notes.txt", "third");
         check(field(body_of(third), "name") == "notes (2).txt",
               "upload: third copy -> 'notes (2).txt'");

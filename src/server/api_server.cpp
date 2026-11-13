@@ -1223,7 +1223,9 @@ void ApiServer::handle_client(int client_fd) {
                     ? base_name
                     : stem.string() + " (" + std::to_string(n) + ")" + ext.string();
                 dest = resolve_in_root(root, (target_dir / candidate).string());
-                fd = ::open(dest.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0644);
+                // 0600: an uploaded file is readable by its owner only, never
+                // by other users of the machine (SonarCloud S2612).
+                fd = ::open(dest.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600);
                 if (fd < 0 && errno != EEXIST) {
                     fail(ErrorCode::Permission, "Cannot write uploaded file.");
                 }
