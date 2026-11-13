@@ -8,6 +8,9 @@
 #   build-cov/coverage/index.html   per-file HTML report (open in a browser)
 #   build-cov/coverage/summary.txt  the text table printed below
 #   build-cov/coverage/summary.json machine-readable totals (used by CI)
+#   build-cov/coverage/sonarqube.xml coverage in SonarQube's generic format,
+#                                   uploaded by the SonarCloud workflow
+#                                   (sonar.coverageReportPaths)
 #
 # Needs: cmake, g++, gcov, and gcovr (pip install gcovr).
 #
@@ -39,12 +42,18 @@ ctest --test-dir "$BUILD" --output-on-failure
 mkdir -p "$OUT"
 # Read only the library's coverage data (not CMake's compiler checks or the
 # test programs themselves); report only src/, without the CLI's main().
+# The fuzz test runs some decoder loops billions of times; gcovr calls hit
+# counts that large "suspicious" (a guard against an old gcov bug). They are
+# real here, so they are accepted with a warning instead of an error.
+GCOV_OPTS=(--gcov-ignore-parse-errors=suspicious_hits.warn_once_per_file)
+
 COMMON=(--root . --filter 'src/' --exclude 'src/cli/'
         --exclude-throw-branches --exclude-unreachable-branches
-        "$BUILD/CMakeFiles/uatc_core.dir")
+        "${GCOV_OPTS[@]}" "$BUILD/CMakeFiles/uatc_core.dir")
 
 gcovr "${COMMON[@]}" --txt "$OUT/summary.txt" --txt-metric branch \
       --html-details "$OUT/index.html" --json-summary "$OUT/summary.json" \
+      --sonarqube "$OUT/sonarqube.xml" \
       --print-summary
 echo
 cat "$OUT/summary.txt"
@@ -53,7 +62,7 @@ cat "$OUT/summary.txt"
 echo
 for layer in core archive filesystem server; do
     printf '%-12s ' "src/$layer"
-    gcovr --root . --filter "src/$layer/" \
+    gcovr --root . --filter "src/$layer/" "${GCOV_OPTS[@]}" \
           --exclude-throw-branches --exclude-unreachable-branches \
           "$BUILD/CMakeFiles/uatc_core.dir" --print-summary -o /dev/null \
         | grep -E '^(lines|branches)' | tr '\n' ' '
@@ -62,7 +71,7 @@ done
 
 # STP exit criterion on the core modules: fail the run below target.
 echo
-gcovr --root . --filter 'src/core/' \
+gcovr --root . --filter 'src/core/' "${GCOV_OPTS[@]}" \
       --exclude-throw-branches --exclude-unreachable-branches \
       "$BUILD/CMakeFiles/uatc_core.dir" \
       --fail-under-line 80 --fail-under-branch 70 -o /dev/null
