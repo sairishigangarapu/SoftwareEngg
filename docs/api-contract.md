@@ -31,7 +31,9 @@ fragment, which the browser never sends to a server.
 | Session token | Every `/api/*` call except `/api/health` must send `X-UATC-Token: <token>`; missing or wrong token gets 403 E_PERMISSION. Compared in constant time | TC-SEC-03 |
 | Allowed root | Every path (query or body) is percent-decoded once, resolved against the root, symlinks followed, `..` normalised; anything outside the root gets 403 E_PERMISSION | TC-API-04, TC-SEC-04 |
 | Input validation | Bodies must be flat JSON objects (no nesting, no duplicate keys, no trailing text). `workers` must be a whole number 1-256, `blockSize` 1024-67108864. Bad percent-encoding or a NUL byte in a path gets 400 | TC-API-02, TC-SEC-04 |
-| Size limits | Headers over 16 KiB get 431, bodies over 64 KiB get 413; an idle client is dropped after 5 s | TC-SEC-04 |
+| Size limits | Headers over 16 KiB get 431, bodies over 64 KiB get 413 (uploads: 64 MiB), checked on `Content-Length` before the body is read; an idle client is dropped after 5 s | TC-SEC-04 |
+| No overwrite | An upload never replaces an existing file: a taken name becomes `name (1).ext`, `name (2).ext`, ...; created atomically (`O_EXCL`) | D-13 |
+| Bounded memory | Downloads are streamed in 64 KiB chunks; server memory does not grow with the file size (300 MB file: 3 MB peak) | D-14 |
 | Token handling | Printed once at startup; never written into a response or an error message | SAD 3.9 |
 
 ## Endpoints
@@ -48,6 +50,8 @@ GET  /api/archives/info?path=    -> 200 info object (docs/inspection-data.md sec
                                     originalBytes, archiveBytes, ratio, storedBlocks,
                                     compressedBlocks, transformUsage[{id,name,blocks}],
                                     codecUsage[{id,name,blocks}]
+POST /api/fs/upload?name=&dir=  -> 200 { "path", "name", "renamed", "size" }
+GET  /api/fs/download?path=      -> 200 the file's bytes (application/octet-stream)
 
 ## Requests
 
@@ -55,6 +59,37 @@ compress: { "source": "/home/user/project", "destination": "/home/user/project.u
             "workers": 8, "blockSize": 1048576 }      // workers, blockSize optional
 extract:  { "archive": "/home/user/project.uatc", "destination": "/home/user/restored" }
 verify:   { "archive": "/home/user/project.uatc" }
+
+## Upload and download
+
+**Upload** sends a file from the browser into the allowed root, so the user
+can compress files that are not already there.
+
+- Request: `POST /api/fs/upload?name=<file name>&dir=<folder>`, body = the
+  raw file bytes (`Content-Type: application/octet-stream`), at most 64 MiB.
+- `name` is reduced to its last component (`../../a.txt` -> `a.txt`);
+  empty, `.` and `..` are refused with 400.
+- `dir` is optional and must resolve inside the allowed root (403
+  otherwise). Without it, the file goes to an `uploads` folder inside the
+  root.
+- If the name is taken, the file is saved as `name (1).ext` and so on;
+  `renamed` is then `true` and `name` is the name actually used. The UI
+  tells the user ("A file called ... was already there, so this one was
+  saved as ...").
+- A write that fails part-way removes the partial file.
+
+**Download** returns a file from the allowed root, for example the archive
+just created.
+
+- Request: `GET /api/fs/download?path=<file>`; 403 outside the root, 400 for
+  a folder, 404 if missing.
+- Response: `Content-Length`, `Content-Disposition: attachment;
+  filename="<name>"` (quotes, backslashes and line breaks in the name become
+  `_`), then the bytes, streamed.
+- The browser fetches it with the token header and saves the blob, so the
+  token never appears in a URL.
+
+Tests: `tests/server/api_test.cpp`, section "upload / download".
 
 ## Progress
 
