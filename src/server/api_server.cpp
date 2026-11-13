@@ -421,6 +421,7 @@ namespace {
 
 constexpr std::size_t kMaxHeaderBytes = 16 * 1024;
 constexpr std::size_t kMaxBodyBytes = 64 * 1024;
+constexpr std::size_t kMaxUploadBytes = 64 * 1024 * 1024;
 constexpr std::size_t kMaxWorkers = 256;
 constexpr std::size_t kMinBlockSize = 1024;               // 1 KiB
 constexpr std::size_t kMaxBlockSize = 64 * 1024 * 1024;   // 64 MiB
@@ -437,6 +438,7 @@ struct HttpResponse {
     int status = 200;
     std::string body;
     std::string content_type = "application/json";
+    std::string content_disposition;
 };
 
 [[noreturn]] void fail(ErrorCode code, const std::string& message) {
@@ -475,8 +477,11 @@ void send_response(int fd, const HttpResponse& response,
     out << "HTTP/1.1 " << response.status << " "
         << reason_phrase(response.status) << "\r\n"
         << "Content-Type: " << response.content_type << "\r\n"
-        << "Content-Length: " << response.body.size() << "\r\n"
-        << "X-Content-Type-Options: nosniff\r\n"
+        << "Content-Length: " << response.body.size() << "\r\n";
+    if (!response.content_disposition.empty()) {
+        out << "Content-Disposition: " << response.content_disposition << "\r\n";
+    }
+    out << "X-Content-Type-Options: nosniff\r\n"
         << "Cache-Control: no-store\r\n";
     // CORS: echo the origin only when it is on the allow-list. Never '*'.
     if (!allow_origin.empty()) {
@@ -998,7 +1003,11 @@ void ApiServer::handle_client(int client_fd) {
                 fail(ErrorCode::InvalidArgument, "Bad Content-Length.");
             }
             content_length = std::stoul(v);
-            if (content_length > kMaxBodyBytes) {
+            const std::size_t limit =
+                (request.method == "POST" && request.path == "/api/fs/upload")
+                    ? kMaxUploadBytes
+                    : kMaxBodyBytes;
+            if (content_length > limit) {
                 respond({413, error_json(ErrorCode::InvalidArgument,
                                          "The request body is too large.")});
                 return;
@@ -1127,6 +1136,92 @@ void ApiServer::handle_client(int client_fd) {
             }
             o << "]}";
             respond({200, o.str()});
+            return;
+        }
+
+        // ---- POST /api/fs/upload?name=...
+        if (request.method == "POST" && request.path == "/api/fs/upload") {
+            const std::string raw_name = query_param(request.query, "name");
+            if (raw_name.empty() ||
+                raw_name.find('\0') != std::string::npos) {
+                fail(ErrorCode::InvalidArgument, "Missing file name.");
+            }
+            const std::string base_name = fs::path(raw_name).filename().string();
+            if (base_name.empty() || base_name == "." || base_name == "..") {
+                fail(ErrorCode::InvalidArgument, "Invalid file name.");
+            }
+
+            fs::path target_dir;
+            const std::string dir_param = query_param(request.query, "dir");
+            if (!dir_param.empty()) {
+                target_dir = resolve_in_root(root, dir_param);
+            } else {
+                std::error_code cwd_ec;
+                const fs::path cwd = fs::current_path(cwd_ec);
+                bool cwd_in_root = false;
+                if (!cwd_ec) {
+                    try {
+                        target_dir = resolve_in_root(root, cwd.string()) / "uploads";
+                        cwd_in_root = true;
+                    } catch (...) {
+                    }
+                }
+                if (!cwd_in_root) {
+                    target_dir = root / "uploads";
+                }
+            }
+
+            std::error_code dir_ec;
+            fs::create_directories(target_dir, dir_ec);
+            if (dir_ec) {
+                fail(ErrorCode::Permission, "Cannot create upload folder.");
+            }
+            const fs::path dest = resolve_in_root(
+                root, (target_dir / base_name).string());
+            std::ofstream out(dest, std::ios::binary | std::ios::trunc);
+            if (!out) {
+                fail(ErrorCode::Permission, "Cannot write uploaded file.");
+            }
+            out.write(request.body.data(),
+                      static_cast<std::streamsize>(request.body.size()));
+            out.flush();
+            if (!out) {
+                fail(ErrorCode::Io, "Failed while writing uploaded file.");
+            }
+
+            std::ostringstream o;
+            o << "{\"path\":\"" << json_escape(dest.string())
+              << "\",\"name\":\"" << json_escape(base_name)
+              << "\",\"size\":" << request.body.size() << "}";
+            respond({200, o.str()});
+            return;
+        }
+
+        // ---- GET /api/fs/download?path=
+        if (request.method == "GET" && request.path == "/api/fs/download") {
+            const fs::path file_path =
+                resolve_in_root(root, query_param(request.query, "path"));
+            if (!fs::exists(file_path)) {
+                fail(ErrorCode::NotFound, "No such file.");
+            }
+            if (!fs::is_regular_file(file_path)) {
+                fail(ErrorCode::InvalidArgument, "Not a regular file.");
+            }
+            std::ifstream in(file_path, std::ios::binary);
+            if (!in) {
+                fail(ErrorCode::Permission, "Cannot read file.");
+            }
+            std::ostringstream content;
+            content << in.rdbuf();
+            std::string safe_name = file_path.filename().string();
+            for (char& ch : safe_name) {
+                if (ch == '"' || ch == '\r' || ch == '\n' || ch == '\\') {
+                    ch = '_';
+                }
+            }
+            if (safe_name.empty()) safe_name = "archive.uatc";
+            respond({200, content.str(), "application/octet-stream",
+                     "attachment; filename=\"" + safe_name + "\""});
             return;
         }
 

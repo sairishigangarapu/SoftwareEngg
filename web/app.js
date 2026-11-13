@@ -654,6 +654,7 @@ function showResult(result) {
 // Wireframe 7.
 function showCompression(r) {
   $('result-title').textContent = 'Done';
+  const dest = $('destination').value.trim();
   const rows = [
     ['Original size', formatBytes(r.originalBytes)],
     ['Archive size', formatBytes(r.archiveBytes)],
@@ -663,15 +664,57 @@ function showCompression(r) {
       ? Number(r.throughputMBps).toFixed(1) + ' MB/s' : 'Unknown'],
     ['Blocks stored as-is', `${r.stored ?? 0} of ${r.blocks ?? 0}`]
   ];
+  if (dest) rows.push(['Saved to', dest]);
   if (Number(r.files) > 1) rows.unshift(['Files', r.files]);
+
+  const downloadHtml = (!USE_MOCK && dest)
+    ? '<p class="actions"><button type="button" id="btn-download-archive" class="primary">Download archive</button></p>'
+    : '';
 
   $('result-body').innerHTML =
     mockNote('these are sample statistics; nothing was compressed.') +
     '<p class="status-ok">The archive was created.</p>' +
+    downloadHtml +
     '<h3>Compression statistics</h3>' + renderPairs(rows) +
     (Number(r.stored) > 0 ? `<p class="help">${escapeHtml(STORED_EXPLANATION)}</p>` : '') +
     renderUsage(r.transformUsage, 'Method used for each part');
+
+  const dlBtn = $('btn-download-archive');
+  if (dlBtn) {
+    dlBtn.addEventListener('click', () => downloadArchive(dest, dlBtn));
+  }
   show('result');
+}
+
+async function downloadArchive(path, button) {
+  button.disabled = true;
+  const originalLabel = button.textContent;
+  button.textContent = 'Downloading…';
+  try {
+    const response = await fetch(
+      API + '/fs/download?path=' + encodeURIComponent(path),
+      { headers: { 'X-UATC-Token': TOKEN } }
+    );
+    if (!response.ok) {
+      let errData = null;
+      try { errData = await response.json(); } catch {}
+      throw errData?.error || { code: 'E_INTERNAL' };
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = basename(path) || 'archive.uatc';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
 }
 
 // Wireframe 8 (left).
@@ -771,6 +814,51 @@ $('btn-progress-home').addEventListener('click', () => {
 });
 $('btn-error-retry').addEventListener('click', () => show('select'));
 $('btn-error-back').addEventListener('click', () => show('home'));
+
+if (USE_MOCK) {
+  $('btn-upload-source').hidden = true;
+} else {
+  $('btn-upload-source').addEventListener('click', () => {
+    $('file-upload').value = '';
+    $('file-upload').click();
+  });
+
+  $('file-upload').addEventListener('change', async () => {
+    const file = $('file-upload').files?.[0];
+    if (!file) return;
+    clearFormError();
+    const btn = $('btn-upload-source');
+    const prevText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    try {
+      const response = await fetch(
+        API + '/fs/upload?name=' + encodeURIComponent(file.name),
+        {
+          method: 'POST',
+          headers: {
+            'X-UATC-Token': TOKEN,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: file
+        }
+      );
+      let data = null;
+      try { data = await response.json(); } catch {}
+      if (!response.ok) {
+        throw data?.error || { code: 'E_INTERNAL' };
+      }
+      $('source').value = data.path;
+      $('destination').value = '';
+      suggestDestination();
+    } catch (error) {
+      showError(error);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  });
+}
 
 if (USE_MOCK) {
   $('mode-banner').hidden = false;
