@@ -55,7 +55,7 @@ int main() {
         data.push_back(static_cast<std::uint8_t>((i / 4) & 0xFF));  // numeric
     for (int i = 0; i < 60000; ++i) data.push_back(0x00);            // runs
     {
-        std::mt19937 rng(3);
+        std::mt19937 rng(3);  // NOSONAR - deterministic test data
         for (int i = 0; i < 60000; ++i)
             data.push_back(static_cast<std::uint8_t>(rng()));        // noise
     }

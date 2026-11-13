@@ -48,7 +48,7 @@ int main() {
         original.push_back(static_cast<std::uint8_t>((i / 4) & 0xFF));
     for (int i = 0; i < 100000; ++i) original.push_back(0x00);
     {
-        std::mt19937 rng(11);
+        std::mt19937 rng(11);  // NOSONAR - deterministic test data
         for (int i = 0; i < 50000; ++i)
             original.push_back(static_cast<std::uint8_t>(rng()));
     }
@@ -93,7 +93,7 @@ int main() {
 
     // --- An incompressible file is stored, not squeezed ---
     {
-        std::mt19937 rng(99);
+        std::mt19937 rng(99);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> noise(200000);
         for (auto& b : noise) b = static_cast<std::uint8_t>(rng());
         const auto noise_source = work / "noise.bin";

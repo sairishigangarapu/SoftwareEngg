@@ -40,7 +40,7 @@ int main() {
 
     // 3. Random data -> stored unchanged (FR-08 store decision).
     {
-        std::mt19937 rng(31337);
+        std::mt19937 rng(31337);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(4000);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         auto s = selector.select(ByteSpan(data));
@@ -100,7 +100,7 @@ int main() {
 
     // 8. Every selected transform round-trips its own output.
     {
-        std::mt19937 rng(5);
+        std::mt19937 rng(5);  // NOSONAR - deterministic test data
         for (int trial = 0; trial < 20; ++trial) {
             std::vector<std::uint8_t> data(1 + (rng() % 2000));
             for (auto& b : data) b = static_cast<std::uint8_t>(rng() & 0x0F);

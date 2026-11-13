@@ -72,7 +72,7 @@ int main() {
         data.push_back(static_cast<std::uint8_t>((i / 4) & 0xFF));
     for (int i = 0; i < 50000; ++i) data.push_back(0x00);
     {
-        std::mt19937 rng(5);
+        std::mt19937 rng(5);  // NOSONAR - deterministic test data
         for (int i = 0; i < 30000; ++i)
             data.push_back(static_cast<std::uint8_t>(rng()));
     }

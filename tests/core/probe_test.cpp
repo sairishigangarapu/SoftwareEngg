@@ -47,7 +47,7 @@ int main() {
 
     // 4. Random bytes -> not compressible.
     {
-        std::mt19937 rng(7);
+        std::mt19937 rng(7);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(4096);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         auto r = probe.probe(ByteSpan(data));
@@ -57,7 +57,7 @@ int main() {
 
     // 5. Already-compressed-like data (incompressible) -> not compressible.
     {
-        std::mt19937 rng(99);
+        std::mt19937 rng(99);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(8192);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         auto r = probe.probe(ByteSpan(data));
@@ -90,7 +90,7 @@ int main() {
     //    estimate come out a couple of bytes *under* the original size, which
     //    used to flip the decision on purely random data.
     {
-        std::mt19937 rng(4242);
+        std::mt19937 rng(4242);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(256 * 1024);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         auto r = probe.probe(ByteSpan(data));
@@ -102,7 +102,7 @@ int main() {
     //     The entropy of a short block is capped at log2(n) bits per byte,
     //     so short blocks are judged by their size estimate instead.
     {
-        std::mt19937 rng(777);
+        std::mt19937 rng(777);  // NOSONAR - deterministic test data
         std::vector<std::uint8_t> data(32);
         for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         assert(!probe.is_compressible(ByteSpan(data)));

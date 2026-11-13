@@ -51,7 +51,7 @@ int main() {
         data.push_back(static_cast<std::uint8_t>((i / 7) & 0xFF));
     for (int i = 0; i < 1000000; ++i) data.push_back(0x00);
     {
-        std::mt19937 rng(17);
+        std::mt19937 rng(17);  // NOSONAR - deterministic test data
         for (int i = 0; i < 1000000; ++i)
             data.push_back(static_cast<std::uint8_t>(rng()));
     }
@@ -116,7 +116,7 @@ int main() {
     {
         std::vector<std::uint8_t> small(10000);
         {
-            std::mt19937 rng(3);
+            std::mt19937 rng(3);  // NOSONAR - deterministic test data
             for (auto& b : small) b = static_cast<std::uint8_t>(rng());
         }
         const auto small_source = work / "small.bin";

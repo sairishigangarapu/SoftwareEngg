@@ -88,7 +88,7 @@ int main() {
     {
         std::vector<std::uint8_t> data(5000);
         {
-            std::mt19937 rng(1);
+            std::mt19937 rng(1);  // NOSONAR - deterministic test data
             for (auto& b : data) b = static_cast<std::uint8_t>(rng());
         }
         const auto source = work / "good.bin";

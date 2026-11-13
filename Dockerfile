@@ -11,7 +11,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /uatc
-COPY . .
+COPY CMakeLists.txt Makefile ./
+COPY include ./include
+COPY src ./src
+COPY tests ./tests
+COPY scripts ./scripts
+COPY web ./web
+COPY pcomp ./pcomp
+
+RUN useradd --create-home --shell /bin/bash uatc \
+    && chown -R uatc:uatc /uatc
+USER uatc
 
 # The lab machines have no cmake, so the Makefile is the primary build; in
 # the image cmake exists, and building through CMakeLists.txt exercises the
