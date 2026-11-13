@@ -516,6 +516,72 @@ int main() {
               "UC-1: folder archive extracts through the API", x);
     }
 
+    // ================================ upload / download (FR-13, SAD 3.9)
+    {
+        const std::string up = "/api/fs/upload?dir=" + percent_encode(root.string()) + "&name=";
+        auto read_text = [](const fs::path& p) {
+            std::ifstream in(p, std::ios::binary);
+            return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        };
+
+        const auto first = post(up + "notes.txt", "hello");
+        check(status_of(first) == 200 && field(body_of(first), "name") == "notes.txt" &&
+                  has(body_of(first), "\"renamed\":false") &&
+                  read_text(root / "notes.txt") == "hello",
+              "upload: file stored under its own name", body_of(first));
+
+        // D-13: a second upload with the same name must not overwrite.
+        const auto second = post(up + "notes.txt", "second");
+        check(status_of(second) == 200 && field(body_of(second), "name") == "notes (1).txt" &&
+                  has(body_of(second), "\"renamed\":true") &&
+                  read_text(root / "notes.txt") == "hello" &&
+                  read_text(root / "notes (1).txt") == "second",
+              "upload: same name again -> saved as 'notes (1).txt', original untouched",
+              body_of(second));
+        const auto third = post(up + "notes.txt", "third");
+        check(field(body_of(third), "name") == "notes (2).txt",
+              "upload: third copy -> 'notes (2).txt'");
+
+        const auto escape = post(up + percent_encode("../../escape.txt"), "x");
+        check(status_of(escape) == 200 && fs::exists(root / "escape.txt") &&
+                  !fs::exists(work / "escape.txt"),
+              "upload: '../../escape.txt' is stored as escape.txt inside the root");
+        check(status_of(post("/api/fs/upload?dir=..&name=a.txt", "x")) == 403,
+              "upload: target folder outside the root -> 403");
+        check(status_of(http("POST /api/fs/upload?name=a.txt HTTP/1.1\r\n" + kHost +
+                             "Content-Length: 1\r\n\r\nx")) == 403,
+              "upload: no token -> 403");
+        check(status_of(post(up, "x")) == 400, "upload: missing name -> 400");
+        // The size check happens on Content-Length, before reading the body.
+        check(status_of(http("POST " + up + "huge.bin HTTP/1.1\r\n" + kHost + auth +
+                             "Content-Length: 73400320\r\n\r\n")) == 413,
+              "upload: 70 MB declared -> 413 before any body is read");
+
+        // Download: exact bytes, across many 64 KiB chunks and an odd tail.
+        std::string blob(5 * 1024 * 1024 + 12345, '\0');
+        for (std::size_t i = 0; i < blob.size(); ++i) blob[i] = static_cast<char>((i * 131) ^ (i >> 7));
+        write_file(root / "blob.bin", blob);
+        const auto dl = get("/api/fs/download?path=" + percent_encode((root / "blob.bin").string()));
+        check(status_of(dl) == 200 && body_of(dl) == blob &&
+                  has(headers_of(dl), "Content-Length: " + std::to_string(blob.size())) &&
+                  has(headers_of(dl), "Content-Disposition: attachment; filename=\"blob.bin\""),
+              "download: streamed body is byte-identical, with length and file name");
+
+        write_file(root / "a\"b.txt", "q");
+        const auto quoted = get("/api/fs/download?path=" + percent_encode((root / "a\"b.txt").string()));
+        check(has(headers_of(quoted), "filename=\"a_b.txt\""),
+              "download: quote in a file name cannot break the header");
+
+        check(status_of(get("/api/fs/download?path=" + percent_encode((work / "outside.txt").string()))) == 403,
+              "download: file outside the root -> 403");
+        check(status_of(get("/api/fs/download?path=" + percent_encode((root / "sub").string()))) == 400,
+              "download: a folder -> 400");
+        check(status_of(get("/api/fs/download?path=missing.bin")) == 404,
+              "download: missing file -> 404");
+        check(status_of(http("GET /api/fs/download?path=notes.txt HTTP/1.1\r\n" + kHost + "\r\n")) == 403,
+              "download: no token -> 403");
+    }
+
     // ================================================== misc
     {
         const auto r = get("/api/jobs/j-9999");
