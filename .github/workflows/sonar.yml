@@ -21,6 +21,19 @@ jobs:
           cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build build -j"$(nproc)"
 
+      # Coverage for SonarCloud's "Coverage on New Code" condition: build
+      # with --coverage, run every C++ test (CTest), and write the report
+      # in SonarQube's generic format (scripts/coverage.sh). Without this
+      # step SonarCloud sees 0% coverage on every new line.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Coverage (gcov + gcovr)
+        run: |
+          python -m pip install --quiet "gcovr>=8,<9"
+          scripts/coverage.sh
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v5
         env:

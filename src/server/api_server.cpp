@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <cstring>
 #include <fcntl.h>
@@ -471,15 +472,18 @@ void send_all(int fd, const std::string& data) {
     }
 }
 
-void send_response(int fd, const HttpResponse& response,
-                   const std::string& allow_origin) {
+// The status line and headers shared by every response. The body follows
+// separately, so a file can be streamed instead of held in memory.
+std::string response_head(int status, const std::string& content_type,
+                          std::uint64_t content_length,
+                          const std::string& content_disposition,
+                          const std::string& allow_origin) {
     std::ostringstream out;
-    out << "HTTP/1.1 " << response.status << " "
-        << reason_phrase(response.status) << "\r\n"
-        << "Content-Type: " << response.content_type << "\r\n"
-        << "Content-Length: " << response.body.size() << "\r\n";
-    if (!response.content_disposition.empty()) {
-        out << "Content-Disposition: " << response.content_disposition << "\r\n";
+    out << "HTTP/1.1 " << status << " " << reason_phrase(status) << "\r\n"
+        << "Content-Type: " << content_type << "\r\n"
+        << "Content-Length: " << content_length << "\r\n";
+    if (!content_disposition.empty()) {
+        out << "Content-Disposition: " << content_disposition << "\r\n";
     }
     out << "X-Content-Type-Options: nosniff\r\n"
         << "Cache-Control: no-store\r\n";
@@ -490,8 +494,39 @@ void send_response(int fd, const HttpResponse& response,
             << "Access-Control-Allow-Headers: Content-Type, X-UATC-Token\r\n"
             << "Vary: Origin\r\n";
     }
-    out << "Connection: close\r\n\r\n" << response.body;
-    send_all(fd, out.str());
+    out << "Connection: close\r\n\r\n";
+    return out.str();
+}
+
+void send_response(int fd, const HttpResponse& response,
+                   const std::string& allow_origin) {
+    send_all(fd, response_head(response.status, response.content_type,
+                               response.body.size(),
+                               response.content_disposition, allow_origin) +
+                     response.body);
+}
+
+// Streams a file as the response body in 64 KiB chunks, so memory use does
+// not grow with the file size (D-14: the first version held the whole file
+// in memory several times over). The file is opened and sized before the
+// headers go out, so open errors still produce a normal error response.
+void send_file_response(int fd, std::ifstream& in, std::uint64_t size,
+                        const std::string& content_disposition,
+                        const std::string& allow_origin) {
+    send_all(fd, response_head(200, "application/octet-stream", size,
+                               content_disposition, allow_origin));
+    char chunk[64 * 1024];
+    std::uint64_t left = size;
+    while (left > 0 && in) {
+        in.read(chunk, static_cast<std::streamsize>(
+                           std::min<std::uint64_t>(sizeof chunk, left)));
+        const auto got = static_cast<std::size_t>(in.gcount());
+        if (got == 0) break;
+        send_all(fd, std::string(chunk, got));
+        left -= got;
+    }
+    // If the file shrank while being sent, the client sees a short body
+    // against Content-Length and treats the download as failed.
 }
 
 HttpResponse json_error(ErrorCode code, const std::string& message) {
@@ -1176,23 +1211,48 @@ void ApiServer::handle_client(int client_fd) {
             if (dir_ec) {
                 fail(ErrorCode::Permission, "Cannot create upload folder.");
             }
-            const fs::path dest = resolve_in_root(
-                root, (target_dir / base_name).string());
-            std::ofstream out(dest, std::ios::binary | std::ios::trunc);
-            if (!out) {
-                fail(ErrorCode::Permission, "Cannot write uploaded file.");
+            // Never overwrite (D-13): if the name is taken, use "name (1).ext",
+            // "name (2).ext", ... O_EXCL makes the check and the creation one
+            // atomic step, so two uploads cannot replace each other either.
+            const fs::path stem = fs::path(base_name).stem();
+            const fs::path ext = fs::path(base_name).extension();
+            fs::path dest;
+            int fd = -1;
+            for (int n = 0; n < 1000 && fd < 0; ++n) {
+                const std::string candidate = n == 0
+                    ? base_name
+                    : stem.string() + " (" + std::to_string(n) + ")" + ext.string();
+                dest = resolve_in_root(root, (target_dir / candidate).string());
+                // 0600: an uploaded file is readable by its owner only, never
+                // by other users of the machine (SonarCloud S2612).
+                fd = ::open(dest.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600);
+                if (fd < 0 && errno != EEXIST) {
+                    fail(ErrorCode::Permission, "Cannot write uploaded file.");
+                }
             }
-            out.write(request.body.data(),
-                      static_cast<std::streamsize>(request.body.size()));
-            out.flush();
-            if (!out) {
+            if (fd < 0) {
+                fail(ErrorCode::Io, "Too many files with this name already.");
+            }
+            std::size_t written = 0;
+            while (written < request.body.size()) {
+                const ssize_t n = ::write(fd, request.body.data() + written,
+                                          request.body.size() - written);
+                if (n <= 0) break;
+                written += static_cast<std::size_t>(n);
+            }
+            ::close(fd);
+            if (written != request.body.size()) {
+                std::error_code ignored;
+                fs::remove(dest, ignored);   // no partial upload left behind
                 fail(ErrorCode::Io, "Failed while writing uploaded file.");
             }
+            const std::string stored_name = dest.filename().string();
 
             std::ostringstream o;
             o << "{\"path\":\"" << json_escape(dest.string())
-              << "\",\"name\":\"" << json_escape(base_name)
-              << "\",\"size\":" << request.body.size() << "}";
+              << "\",\"name\":\"" << json_escape(stored_name)
+              << "\",\"renamed\":" << (stored_name != base_name ? "true" : "false")
+              << ",\"size\":" << request.body.size() << "}";
             respond({200, o.str()});
             return;
         }
@@ -1211,8 +1271,7 @@ void ApiServer::handle_client(int client_fd) {
             if (!in) {
                 fail(ErrorCode::Permission, "Cannot read file.");
             }
-            std::ostringstream content;
-            content << in.rdbuf();
+            const std::uint64_t size = fs::file_size(file_path);
             std::string safe_name = file_path.filename().string();
             for (char& ch : safe_name) {
                 if (ch == '"' || ch == '\r' || ch == '\n' || ch == '\\') {
@@ -1220,8 +1279,9 @@ void ApiServer::handle_client(int client_fd) {
                 }
             }
             if (safe_name.empty()) safe_name = "archive.uatc";
-            respond({200, content.str(), "application/octet-stream",
-                     "attachment; filename=\"" + safe_name + "\""});
+            send_file_response(client_fd, in, size,
+                               "attachment; filename=\"" + safe_name + "\"",
+                               allow_origin);
             return;
         }
 
