@@ -19,7 +19,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 CLI="${UATC_CLI:-build/uatc_cli}"
-[ -x "$CLI" ] || make cli >/dev/null || { echo "cannot build $CLI" >&2; exit 2; }
+[[ -x "$CLI" ]] || make cli >/dev/null || { echo "cannot build $CLI" >&2; exit 2; }
 CLI="$(cd "$(dirname "$CLI")" && pwd)/$(basename "$CLI")"
 
 WORK="$(mktemp -d -t uatc-validation-XXXXXX)"
@@ -92,10 +92,10 @@ for rel in $FILES; do
     restored="$out/$(basename "$rel")"
     o=$(stat -c%s "$src"); a=$(stat -c%s "$arc")
     ratio=$(awk -v o="$o" -v a="$a" 'BEGIN{printf "%.2f", a ? o/a : 0}')
-    if [ "$(sha256sum <"$src")" = "$(sha256sum <"$restored")" ]; then r=identical; else r=DIFFERENT; FAILED=1; fi
+    if [[ "$(sha256sum <"$src")" = "$(sha256sum <"$restored")" ]]; then r=identical; else r=DIFFERENT; FAILED=1; fi
     printf '%-30s %12s %12s %7s %s\n' "$rel" "$o" "$a" "$ratio" "$r"
 done
-[ "$FAILED" -eq 0 ] && pass NFR-01 "every file verified and restored with identical SHA-256"
+[[ "$FAILED" -eq 0 ]] && pass NFR-01 "every file verified and restored with identical SHA-256"
 echo
 
 # ------------------------------------------------- TC-ARC-03 folder tree
@@ -104,7 +104,7 @@ echo "## Folder tree (TC-ARC-03, TC-FS-02, TC-INFO-01)"
 files_in=$(find "$WORK/corpus/tree" -type f | wc -l)
 info_files=$("$CLI" info "$WORK/tree.uatc" | awk -F': +' '/^Files/{print $2}')
 "$CLI" extract "$WORK/tree.uatc" "$WORK/tree_out" --quiet >/dev/null
-if diff -r "$WORK/corpus/tree" "$WORK/tree_out" >/dev/null && [ "$info_files" = "$files_in" ]; then
+if diff -r "$WORK/corpus/tree" "$WORK/tree_out" >/dev/null && [[ "$info_files" = "$files_in" ]]; then
     pass ARC-03 "$files_in files (nested, spaces, Unicode names, 200 tiny files) restored identically; info reports $info_files"
 else
     fail ARC-03 "tree differs or info reports $info_files of $files_in files"
@@ -123,9 +123,9 @@ ref=$(sha256sum <"$WORK/w1.uatc")
 same=1
 for run in $(seq 1 5); do
     "$CLI" compress "$big" "$WORK/w8.uatc" --workers 8 --quiet
-    [ "$(sha256sum <"$WORK/w8.uatc")" = "$ref" ] || same=0
+    [[ "$(sha256sum <"$WORK/w8.uatc")" = "$ref" ]] || same=0
 done
-if [ "$same" -eq 1 ]; then
+if [[ "$same" -eq 1 ]]; then
     pass PAR-01 "workers=1 and 5 runs of workers=8 give byte-identical archives ($(stat -c%s "$big") B input)"
 else
     fail PAR-01 "archives differ between worker counts"
@@ -155,7 +155,7 @@ for rel in text/book.txt text/server.log numeric/timeseries.csv numeric/int32_ra
     src="$WORK/corpus/$rel"; o=$(stat -c%s "$src")
     u=$(stat -c%s "$WORK/a/$rel.uatc")
     g=$(gzip -6 -c "$src" | wc -c)
-    if [ "$HAVE_ZSTD" -eq 1 ]; then
+    if [[ "$HAVE_ZSTD" -eq 1 ]]; then
         z=$(python3 -c "import sys,zstandard;print(len(zstandard.ZstdCompressor(level=3).compress(open(sys.argv[1],'rb').read())))" "$src")
         zr=$(awk -v o="$o" -v a="$z" 'BEGIN{printf "%.2f", o/a}')
     else zr="n/a"; fi
@@ -193,7 +193,7 @@ printf '\x63\x00' | dd of="$WORK/ver.uatc" bs=1 seek=4 conv=notrunc status=none
 expect_exit ERR-02 "11" "$WORK/ver.uatc" "format version set to 99"
 expect_exit ERR-03 "10" "$WORK/corpus/text/book.txt" "a text file, not an archive"
 "$CLI" extract "$WORK/flip.uatc" "$WORK/flip_out" >/dev/null 2>&1; rc=$?
-if [ "$rc" -eq 13 ] || [ "$rc" -eq 14 ]; then
+if [[ "$rc" -eq 13 ]] || [[ "$rc" -eq 14 ]]; then
     pass INT-01 "extract of the flipped archive also exits $rc, nothing restored"
 else
     fail INT-01 "extract of the flipped archive exits $rc (expected 13/14)"
@@ -222,10 +222,10 @@ PY
 expect_exit SEC-01 "15" "$WORK/sec/evil.uatc" "verify, ../ path with a recomputed checksum"
 mkdir -p "$WORK/sec/dest"
 "$CLI" extract "$WORK/sec/evil.uatc" "$WORK/sec/dest" >/dev/null 2>&1; rc=$?
-if [ "$rc" -eq 15 ] && [ ! -e "$WORK/sec/evil.bin" ] && [ -z "$(ls -A "$WORK/sec/dest")" ]; then
+if [[ "$rc" -eq 15 ]] && [[ ! -e "$WORK/sec/evil.bin" ]] && [[ -z "$(ls -A "$WORK/sec/dest")" ]]; then
     pass SEC-01 "extract refused with exit 15; nothing written inside or outside the destination"
 else
-    fail SEC-01 "extract exit $rc; evil.bin outside: $([ -e "$WORK/sec/evil.bin" ] && echo YES || echo no)"
+    fail SEC-01 "extract exit $rc; evil.bin outside: $([[ -e "$WORK/sec/evil.bin" ]] && echo YES || echo no)"
 fi
 echo
 
@@ -241,7 +241,7 @@ for field in "12:block_count" "8:file_count"; do
     t0=$(date +%s.%N)
     ( ulimit -v 262144; "$CLI" verify "$WORK/huge.uatc" ) >/dev/null 2>"$WORK/err"; rc=$?
     secs=$(awk -v a="$t0" -v b="$(date +%s.%N)" 'BEGIN{printf "%.2f", b-a}')
-    if [ "$rc" -eq 10 ]; then
+    if [[ "$rc" -eq 10 ]]; then
         pass SEC-02 "$name = 4294967295 -> exit 10 in ${secs}s within 256 MB ($(head -c 80 "$WORK/err"))"
     else
         fail SEC-02 "$name = 4294967295 -> exit $rc ($(head -c 80 "$WORK/err"))"
@@ -249,5 +249,5 @@ for field in "12:block_count" "8:file_count"; do
 done
 echo
 
-if [ "$FAILED" -eq 0 ]; then echo "RESULT: all checks passed"; else echo "RESULT: FAILURES above"; fi
+if [[ "$FAILED" -eq 0 ]]; then echo "RESULT: all checks passed"; else echo "RESULT: FAILURES above"; fi
 exit "$FAILED"

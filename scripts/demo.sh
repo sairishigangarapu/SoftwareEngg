@@ -20,12 +20,12 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 CLEAN=0
-[ "${1:-}" = "--clean" ] && CLEAN=1
+[[ "${1:-}" = "--clean" ]] && CLEAN=1
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/uatc-demo-XXXXXX")"
 
 cleanup() {
-    if [ "$CLEAN" -eq 1 ]; then
+    if [[ "$CLEAN" -eq 1 ]]; then
         rm -rf "$WORK"
         printf '\nScratch directory removed: %s\n' "$WORK"
     fi
@@ -33,7 +33,7 @@ cleanup() {
 trap cleanup EXIT
 
 BOLD=''; DIM=''; RESET=''
-if [ -t 1 ]; then
+if [[ -t 1 ]]; then
   BOLD="$(printf '\033[1m')"; DIM="$(printf '\033[2m')"; RESET="$(printf '\033[0m')"
 fi
 
@@ -146,7 +146,7 @@ done
 # ---------------------------------------------------- 6. integrity check
 step "6. Integrity: verify, then corrupt and verify again"
 F="$WORK/corpus/text/english.txt.uatc"
-[ -f "$F" ] || F="$WORK/english.txt.uatc"
+[[ -f "$F" ]] || F="$WORK/english.txt.uatc"
 if "$PWD/build/uatc_cli" verify "$F"; then
   ok "intact archive passes verification"
 else
@@ -168,7 +168,7 @@ note "compression ratios are shown in step 4."
 # make_samples.py rewrites the tracked manifest, and the system headers it
 # picks up differ per machine. Keep the repository's copy as it was.
 MANIFEST="pcomp/datasets/manifest.json"
-[ -f "$MANIFEST" ] && cp "$MANIFEST" "$WORK/manifest.json.bak"
+[[ -f "$MANIFEST" ]] && cp "$MANIFEST" "$WORK/manifest.json.bak"
 
 if python3 pcomp/scripts/make_samples.py >/dev/null 2>&1; then
   ./pcomp/build/pc_bench --root pcomp/datasets/samples --out "$WORK/bench.jsonl" \
@@ -180,13 +180,13 @@ else
 fi
 
 # Put the tracked manifest back the way we found it.
-if [ -f "$WORK/manifest.json.bak" ]; then
+if [[ -f "$WORK/manifest.json.bak" ]]; then
   cp "$WORK/manifest.json.bak" "$MANIFEST"
 fi
 
 # -------------------------------------------------------------- summary
 step "Summary"
-if [ "$FAILED" -eq 0 ]; then
+if [[ "$FAILED" -eq 0 ]]; then
   printf '   %sAll demo steps passed.%s\n' "$BOLD" "$RESET"
 else
   printf '   %sOne or more demo steps failed.%s\n' "$BOLD" "$RESET"
@@ -198,7 +198,7 @@ printf '     *.uatc       the archives that were created\n'
 printf '     bench.jsonl  the benchmark records\n'
 printf '     build.log    the build output\n'
 printf '     test.log     the test output\n'
-if [ "$CLEAN" -eq 0 ]; then
+if [[ "$CLEAN" -eq 0 ]]; then
   printf '\n   Delete it with: rm -rf %s\n' "$WORK"
 fi
 exit "$FAILED"
