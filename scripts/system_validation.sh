@@ -12,7 +12,12 @@
 # repeated runs), TC-PAR-04 (throughput by worker count), TC-NFR-02
 # (comparison with gzip -6 and, if the Python zstandard module is present,
 # zstd -3), TC-INT-01/02, TC-ERR-01/02/03 (damaged archives and exit codes),
-# TC-NFR-07 (statistics reported), TC-VER-01, TC-INFO-01.
+# TC-NFR-07 (statistics reported), TC-VER-01, TC-INFO-01, TC-SEC-01/02,
+# TC-FS-03 (unreadable input, run as an unprivileged user), and the
+# single-core requirement (SRS 3.2.2, STP 6).
+#
+#   UATC_VALIDATION_LARGE=1   also run TC-PAR-04 on a 256 MiB input, as the
+#                             STP asks (about a minute; needs ~1 GB of /tmp)
 #
 # Exit status: 0 when every check passes.
 set -uo pipefail
@@ -121,15 +126,57 @@ with open(sys.argv[1],'w') as f:
 "$CLI" compress "$big" "$WORK/w1.uatc" --workers 1 --quiet
 ref=$(sha256sum <"$WORK/w1.uatc")
 same=1
-for run in $(seq 1 5); do
+for run in $(seq 1 20); do
     "$CLI" compress "$big" "$WORK/w8.uatc" --workers 8 --quiet
     [[ "$(sha256sum <"$WORK/w8.uatc")" = "$ref" ]] || same=0
 done
 if [[ "$same" -eq 1 ]]; then
-    pass PAR-01 "workers=1 and 5 runs of workers=8 give byte-identical archives ($(stat -c%s "$big") B input)"
+    pass PAR-01/02 "workers=1 and 20 runs of workers=8 give byte-identical archives ($(stat -c%s "$big") B input)"
 else
     fail PAR-01 "archives differ between worker counts"
 fi
+echo
+
+# --------------------------------------------- single core (SRS 3.2.2)
+# The system must work correctly, only slower, on one CPU: pin the CLI to
+# CPU 0 and ask for 8 workers anyway.
+echo "## Single core (SRS 3.2.2, STP section 6)"
+if command -v taskset >/dev/null; then
+    taskset -c 0 "$CLI" compress "$big" "$WORK/one_core.uatc" --workers 8 --quiet
+    mkdir -p "$WORK/one_core_out"
+    taskset -c 0 "$CLI" extract "$WORK/one_core.uatc" "$WORK/one_core_out" --quiet >/dev/null
+    if [[ "$(sha256sum <"$WORK/one_core.uatc")" = "$ref" ]] &&
+       cmp -s "$big" "$WORK/one_core_out/$(basename "$big")"; then
+        pass SINGLE-CORE "pinned to CPU 0 with --workers 8: same archive as workers=1 elsewhere, round trip identical"
+    else
+        fail SINGLE-CORE "single-core run differs"
+    fi
+else
+    echo "SKIP  SINGLE-CORE taskset not available"
+fi
+echo
+
+# --------------------------------------------- TC-FS-03 unreadable input
+# Permission bits do not apply to root, so the check runs as the
+# unprivileged user "nobody" when the script itself runs as root.
+echo "## Unreadable input (TC-FS-03)"
+FS03="$(mktemp -d /tmp/uatc-fs03-XXXXXX)"
+chmod 777 "$FS03"
+cp "$CLI" "$FS03/uatc" && chmod 755 "$FS03/uatc"
+echo secret >"$FS03/locked.txt" && chmod 000 "$FS03/locked.txt"
+mkdir -p "$FS03/dir/sub" && echo ok >"$FS03/dir/a.txt" && echo no >"$FS03/dir/sub/b.txt"
+chmod 000 "$FS03/dir/sub/b.txt" && chmod -R a+rwX "$FS03/dir/a.txt" && chmod 777 "$FS03/dir" "$FS03/dir/sub"
+as_user() { if [[ "$(id -u)" -eq 0 ]]; then su nobody -s /bin/sh -c "$1"; else sh -c "$1"; fi; }
+for target in locked.txt dir; do
+    as_user "cd '$FS03' && ./uatc compress $target out.uatc --quiet" >/dev/null 2>"$WORK/err"; rc=$?
+    left=$(ls "$FS03"/out.uatc 2>/dev/null | wc -l)
+    if [[ "$rc" -eq 4 ]] && [[ "$left" -eq 0 ]]; then
+        pass FS-03 "unreadable $target -> exit 4 E_PERMISSION, no archive left"
+    else
+        fail FS-03 "unreadable $target -> exit $rc, archive left: $left ($(tr '\r' '\n' <"$WORK/err" | tail -1 | head -c 100))"
+    fi
+done
+chmod -R u+rwX "$FS03"; rm -rf "$FS03"
 echo
 
 # --------------------------------------------------- TC-PAR-04 throughput
@@ -145,6 +192,43 @@ for wk in 1 2 4 8; do
 done
 echo "(input $size_mb MB, $(nproc) CPUs)"
 echo
+
+# ---------------------------------------- TC-PAR-04 at 256 MiB (opt-in)
+if [[ "${UATC_VALIDATION_LARGE:-0}" = "1" ]]; then
+    echo "## Throughput on 256 MiB (TC-PAR-04, recorded not pass/failed)"
+    huge="$WORK/huge.csv"
+    python3 - "$huge" <<'PY'
+import sys
+target = 256 * 1024 * 1024
+with open(sys.argv[1], "w") as f:
+    i = 0; written = 0
+    while written < target:
+        chunk = "".join(f"{i+k},sensor-{(i+k)%97},{((i+k)*37)%1000}.{(i+k)%10},ok\n" for k in range(20000))
+        f.write(chunk); written += len(chunk); i += 20000
+PY
+    printf '%-8s %10s %10s %10s\n' workers seconds MB/s identical
+    href=""
+    for wk in 1 2 4 8; do
+        t0=$(date +%s.%N)
+        "$CLI" compress "$huge" "$WORK/h.uatc" --workers "$wk" --quiet
+        t1=$(date +%s.%N)
+        h=$(sha256sum <"$WORK/h.uatc"); [[ -z "$href" ]] && href="$h"
+        same=$([[ "$h" = "$href" ]] && echo yes || echo NO)
+        [[ "$same" = yes ]] || FAILED=1
+        awk -v w="$wk" -v a="$t0" -v b="$t1" -v s="$same" \
+            -v m="$(awk -v b="$(stat -c%s "$huge")" 'BEGIN{printf "%.1f", b/1048576}')" \
+            'BEGIN{d=b-a; printf "%-8s %10.2f %10.1f %10s\n", w, d, m/d, s}'
+    done
+    mkdir -p "$WORK/huge_out"
+    "$CLI" extract "$WORK/h.uatc" "$WORK/huge_out" --quiet >/dev/null
+    if cmp -s "$huge" "$WORK/huge_out/huge.csv"; then
+        pass PAR-04 "256 MiB input: archives identical for 1/2/4/8 workers, round trip identical"
+    else
+        fail PAR-04 "256 MiB round trip differs"
+    fi
+    rm -f "$huge" "$WORK/h.uatc"; rm -rf "$WORK/huge_out"
+    echo
+fi
 
 # ------------------------------------------------ TC-NFR-02 vs gzip / zstd
 echo "## Ratio against gzip -6 and zstd -3 (TC-NFR-02, recorded not pass/failed)"

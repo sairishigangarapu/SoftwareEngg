@@ -1,7 +1,9 @@
 #include "filesystem/file_reader.hpp"
 
+#include <cerrno>
 #include <fstream>
 #include <stdexcept>
+#include <system_error>
 
 namespace uatc {
 
@@ -16,9 +18,19 @@ std::vector<std::uint8_t> FileReader::read(
         throw std::runtime_error("Path is not a regular file: " + file_path.string());
     }
 
+    errno = 0;
     std::ifstream file(file_path, std::ios::binary);
 
     if (!file) {
+        // Keep the operating system's reason, so a file the user may not
+        // read is reported as E_PERMISSION rather than a generic disk error
+        // (STP TC-FS-03; classify_exception maps EACCES/EPERM).
+        const int reason = errno;
+        if (reason != 0) {
+            throw std::filesystem::filesystem_error(
+                "Could not open file", file_path,
+                std::error_code(reason, std::generic_category()));
+        }
         throw std::runtime_error("Could not open file: " + file_path.string());
     }
 

@@ -756,10 +756,6 @@ int main(int argc, char* argv[]) {
                   << ": " << error.what() << '\n';
         return uatc::core::error_exit_code(error.code());
 
-    } catch (const std::filesystem::filesystem_error& error) {
-        std::cerr << "error: E_IO: " << error.what() << '\n';
-        return 5;
-
     } catch (const std::exception& error) {
         // Same classification as `verify` and the API (SAD 4.3.4), so a
         // checksum failure during extract exits 13/14, not a generic 10.
