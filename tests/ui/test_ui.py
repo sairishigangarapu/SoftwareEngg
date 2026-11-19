@@ -315,11 +315,14 @@ def test_keyboard_only_compress_flow(ui, corpus):
 
 
 def test_every_input_has_a_label(ui):
+    """Every input has an accessible name: a <label for=...>, or an
+    aria-label (used by the hidden file input behind the Upload... button)."""
     ui.open_live()
     for field in ui.d.find_elements(By.CSS_SELECTOR, "input"):
         field_id = field.get_attribute("id")
         labels = ui.d.find_elements(By.CSS_SELECTOR, f'label[for="{field_id}"]')
-        assert labels, f"input #{field_id} has no <label>"
+        aria = (field.get_attribute("aria-label") or "").strip()
+        assert labels or aria, f"input #{field_id} has no <label> and no aria-label"
 
 
 # ----------------------------------------------------- demo mode (no backend)
